@@ -37,6 +37,7 @@ from __future__ import print_function, division, absolute_import
 import logging
 import os as _os
 import tempfile
+import os as _os
 
 from .base import VerticaPythonTestCase
 from .. import errors
