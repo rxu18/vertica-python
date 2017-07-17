@@ -15,6 +15,8 @@ from ..vertica.cursor import Cursor
 from ..vertica.messages.message import BackendMessage, FrontendMessage
 from ..vertica.messages.frontend_messages import CancelRequest
 
+from collections import deque
+
 logger = logging.getLogger('vertica')
 
 ASCII = 'ascii'
@@ -115,35 +117,99 @@ class Connection(object):
         if self.socket is not None:
             return self.socket
 
-        host = self.options.get('host')
-        port = self.options.get('port')
-        connection_timeout = self.options.get('connection_timeout')
-        raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        raw_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        if connection_timeout is not None:
-            raw_socket.settimeout(connection_timeout)
-        raw_socket.connect((host, port))
+        hosts_q = self.get_queue('host')
+        ports_q = self.get_queue('port')
+        assert(len(hosts_q) == len(ports_q))
+
+        raw_socket = self.create_socket()
+        host = self.try_connecting(hosts_q, ports_q, raw_socket)
+
+        load_balance_options = self.options.get('load')
+        if load_balance_options is not None and load_balance_options is not False:
+            raw_socket, host = self.balance_load(raw_socket, hosts_q, ports_q)
 
         ssl_options = self.options.get('ssl')
         if ssl_options is not None and ssl_options is not False:
-            from ssl import CertificateError, SSLError
-            raw_socket.sendall(messages.SslRequest().get_message())
-            response = raw_socket.recv(1)
-            if response in ('S', b'S'):
-                try:
-                    if isinstance(ssl_options, ssl.SSLContext):
-                        raw_socket = ssl_options.wrap_socket(raw_socket, server_hostname=host)
-                    else:
-                        raw_socket = ssl.wrap_socket(raw_socket)
-                except CertificateError as e:
-                    raise_from(errors.ConnectionError, e)
-                except SSLError as e:
-                    raise_from(errors.ConnectionError, e)
-            else:
-                raise errors.SSLNotSupported("SSL requested but not supported by server")
+            raw_socket = self.enable_ssl(host, raw_socket, ssl_options)
 
         self.socket = raw_socket
         return self.socket
+
+    def get_queue(self, option):
+        list_ = self.options.get(option)
+        if type(list_) != list:
+            q = deque([list_])
+        else:
+            q = deque(list_)
+        return q
+
+    def create_socket(self):
+        raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        raw_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        connection_timeout = self.options.get('connection_timeout')
+        if connection_timeout is not None:
+            raw_socket.settimeout(connection_timeout)
+        return raw_socket
+
+    def enable_ssl(self, host, raw_socket, ssl_options):
+        from ssl import CertificateError, SSLError
+        raw_socket.sendall(messages.SslRequest().get_message())
+        response = raw_socket.recv(1)
+        if response in ('S', b'S'):
+            try:
+                if isinstance(ssl_options, ssl.SSLContext):
+                    raw_socket = ssl_options.wrap_socket(raw_socket, server_hostname=host)
+                else:
+                    raw_socket = ssl.wrap_socket(raw_socket)
+            except CertificateError as e:
+                raise_from(errors.ConnectionError, e)
+            except SSLError as e:
+                raise_from(errors.ConnectionError, e)
+        else:
+            raise errors.SSLNotSupported("SSL requested but not supported by server")
+        return raw_socket
+
+    def balance_load(self, raw_socket, hosts_q, ports_q):
+        raw_socket.sendall(messages.LoadBalanceRequest().get_message())
+        load_balance = raw_socket.recv(1)
+        host = hosts_q[0]
+        if load_balance in (b'Y', 'Y'):
+            size = unpack('!I', raw_socket.recv(4))[0]
+            if size < 4:
+                raise errors.MessageError("Bad message size: {0}".format(size))
+            res = BackendMessage.from_type(type_=load_balance, data=raw_socket.recv(size-4))
+            host = res.get_host()
+            port = res.get_port()
+
+            hosts_q.appendleft(host)
+            ports_q.appendleft(port)
+
+            raw_socket.close()
+            raw_socket = self.create_socket()
+
+            host = self.try_connecting(hosts_q, ports_q, raw_socket)
+
+        return raw_socket, host
+
+    def try_connecting(self, hosts_q, ports_q, raw_socket):
+        host = hosts_q[0]
+        while len(hosts_q) > 0 and len(ports_q) > 0:
+            ex = None
+            host = hosts_q[0]
+            port = ports_q[0]
+            try:
+                raw_socket.connect((host, port))
+                break
+            except Exception as ex:
+                hosts_q.popleft()
+                ports_q.popleft()
+                pass
+
+        # if last attempt was failure raise exception
+        if ex:
+            raise ex
+
+        return host
 
     def ssl(self):
         return self.socket is not None and isinstance(self.socket, ssl.SSLSocket)
