@@ -45,6 +45,7 @@ from .copy_fail import CopyFail
 from .describe import Describe
 from .execute import Execute
 from .flush import Flush
+from .load_balance_request import LoadBalanceRequest
 from .parse import Parse
 from .password import Password
 from .query import Query
@@ -54,5 +55,5 @@ from .sync import Sync
 from .terminate import Terminate
 
 __all__ = ['Bind', 'Query', 'CancelRequest', 'Close', 'CopyData', 'CopyDone', 'CopyFail',
-           'CopyStream', 'Describe', 'Execute', 'Flush', 'Parse', 'Terminate', 'Password',
-           'SslRequest', 'Startup', 'Sync']
+           'CopyStream', 'Describe', 'Execute', 'Flush', 'LoadBalanceRequest', 'Parse', 'Password',
+           'SslRequest', 'Startup', 'Sync', 'Terminate']
