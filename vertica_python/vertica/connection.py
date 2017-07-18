@@ -154,10 +154,11 @@ class Connection(object):
 
         hosts_q = self.get_queue('host')
         ports_q = self.get_queue('port')
-        assert(len(hosts_q) == len(ports_q))
+        if len(hosts_q) != len(ports_q) or len(hosts_q) == 0:
+            err = 'Hosts and ports cannot be empty and must be equal in number'
+            raise errors.ConnectionError(err)
 
-        raw_socket = self.create_socket()
-        host = self.try_connecting(hosts_q, ports_q, raw_socket)
+        raw_socket, host = self.try_connecting(hosts_q, ports_q)
 
         load_balance_options = self.options.get('load')
         if load_balance_options is not None and load_balance_options is not False:
@@ -220,31 +221,35 @@ class Connection(object):
             ports_q.appendleft(port)
 
             raw_socket.close()
-            raw_socket = self.create_socket()
-
-            host = self.try_connecting(hosts_q, ports_q, raw_socket)
+            raw_socket, host = self.try_connecting(hosts_q, ports_q)
 
         return raw_socket, host
 
-    def try_connecting(self, hosts_q, ports_q, raw_socket):
+    def try_connecting(self, hosts_q, ports_q):
         host = hosts_q[0]
+        raw_socket = self.create_socket()
+        exception = None
         while len(hosts_q) > 0 and len(ports_q) > 0:
-            ex = None
+            exception = None
             host = hosts_q[0]
             port = ports_q[0]
             try:
                 raw_socket.connect((host, port))
                 break
             except Exception as ex:
+                exception = ex
                 hosts_q.popleft()
                 ports_q.popleft()
+
+                raw_socket.close()
+                raw_socket = self.create_socket()
                 pass
 
         # if last attempt was failure raise exception
-        if ex:
-            raise ex
+        if exception:
+            raise exception
 
-        return host
+        return raw_socket, host
 
     def ssl(self):
         return self.socket is not None and isinstance(self.socket, ssl.SSLSocket)
