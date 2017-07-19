@@ -125,7 +125,7 @@ class Connection(object):
 
         raw_socket, host = self.try_connecting(hosts_q, ports_q)
 
-        load_balance_options = self.options.get('ConnectionLoadBalance')
+        load_balance_options = self.options.get('connection_load_balance')
         if load_balance_options is not None and load_balance_options is not False:
             raw_socket, host = self.balance_load(raw_socket, hosts_q, ports_q)
 
