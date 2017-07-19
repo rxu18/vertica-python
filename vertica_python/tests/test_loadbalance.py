@@ -12,13 +12,13 @@ class TestLoadBalance(VerticaPythonTestCase):
             pass
 
     def test_loadbalance_true(self):
-        self._conn_info['load'] = True
+        self._conn_info['ConnectionLoadBalance'] = True
         with self._connect() as conn:
             self.assertTrue(conn.socket is not None)
             pass
 
     def test_loadbalance_false(self):
-        self._conn_info['load'] = False
+        self._conn_info['ConnectionLoadBalance'] = False
         with self._connect() as conn:
             self.assertTrue(conn.socket is not None)
             pass
