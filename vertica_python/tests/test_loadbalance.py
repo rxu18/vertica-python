@@ -5,6 +5,8 @@ class TestLoadBalance(VerticaPythonTestCase):
     def tearDown(self):
         self._conn_info['host'] = self._host
         self._conn_info['port'] = self._port
+        if 'connection_load_balance' in self._conn_info:
+            del self._conn_info['connection_load_balance']
 
     def test_loadbalance_option_not_set(self):
         with self._connect() as conn:
