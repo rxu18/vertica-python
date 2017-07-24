@@ -120,16 +120,19 @@ class Connection(object):
         hosts_q = self.get_queue('host')
         ports_q = self.get_queue('port')
         if len(hosts_q) != len(ports_q) or len(hosts_q) == 0:
-            err = 'Hosts and ports cannot be empty and must be equal in number'
-            raise errors.ConnectionError(err)
+            err_msg = 'Hosts and ports cannot be empty and must be equal in number'
+            logger.error(err_msg)
+            raise errors.ConnectionError(err_msg)
 
         raw_socket, host = self.try_connecting(hosts_q, ports_q)
 
         load_balance_options = self.options.get('connection_load_balance')
+        logger.debug('Load Balance:: Option set by the user: {0}'.format(load_balance_options))
         if load_balance_options is not None and load_balance_options is not False:
             raw_socket, host = self.balance_load(raw_socket, hosts_q, ports_q)
 
         ssl_options = self.options.get('ssl')
+        logger.debug('SSL:: Option set by the user: {0}'.format(ssl_options))
         if ssl_options is not None and ssl_options is not False:
             raw_socket = self.enable_ssl(host, raw_socket, ssl_options)
 
@@ -145,10 +148,12 @@ class Connection(object):
         return q
 
     def create_socket(self):
+        logger.info('Creating a new socket for connection')
         raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         raw_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         connection_timeout = self.options.get('connection_timeout')
         if connection_timeout is not None:
+            logger.info('Setting socket connection timeout: {0}'.format(connection_timeout))
             raw_socket.settimeout(connection_timeout)
         return raw_socket
 
@@ -167,17 +172,22 @@ class Connection(object):
             except SSLError as e:
                 raise_from(errors.ConnectionError, e)
         else:
-            raise errors.SSLNotSupported("SSL requested but not supported by server")
+            err_msg = "SSL requested but not supported by server"
+            logger.error(err_msg)
+            raise errors.SSLNotSupported(err_msg)
         return raw_socket
 
     def balance_load(self, raw_socket, hosts_q, ports_q):
         raw_socket.sendall(messages.LoadBalanceRequest().get_message())
         load_balance = raw_socket.recv(1)
-        host = hosts_q[0]
+        logger.debug('Load Balance::Server response: {0}'.format(load_balance))
         if load_balance in (b'Y', 'Y'):
+            logger.info('Load Balance::Starting')
             size = unpack('!I', raw_socket.recv(4))[0]
             if size < 4:
-                raise errors.MessageError("Bad message size: {0}".format(size))
+                err_msg = "Bad message size: {0}".format(size)
+                logger.error(err_msg)
+                raise errors.MessageError(err_msg)
             res = BackendMessage.from_type(type_=load_balance, data=raw_socket.recv(size-4))
             host = res.get_host()
             port = res.get_port()
@@ -187,7 +197,10 @@ class Connection(object):
 
             raw_socket.close()
             raw_socket, host = self.try_connecting(hosts_q, ports_q)
-
+        else:
+            err_msg = "Load balance requested but not supported by server"
+            logger.error(err_msg)
+            raise errors.LoadBalanceNotSupported(err_msg)
         return raw_socket, host
 
     def try_connecting(self, hosts_q, ports_q):
@@ -199,9 +212,11 @@ class Connection(object):
             host = hosts_q[0]
             port = ports_q[0]
             try:
+                logger.info('Attempting to connect to host {0} listening on port {1}'.format(host, port))
                 raw_socket.connect((host, port))
                 break
             except Exception as ex:
+                logger.info('Failed to connect to host {0} listening on port {1}'.format(host, port))
                 exception = ex
                 hosts_q.popleft()
                 ports_q.popleft()
@@ -212,6 +227,7 @@ class Connection(object):
 
         # if last attempt was failure raise exception
         if exception:
+            logger.error('Could not connect to any of the hosts')
             raise exception
 
         return raw_socket, host
