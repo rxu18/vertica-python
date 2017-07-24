@@ -82,3 +82,13 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         with self.assertRaises(errors.ConnectionError):
             with self._connect():
                 pass
+
+    def test_exception_when_server_doesnt_support_loadbalance(self):
+        self._conn_info['connection_load_balance'] = True
+        with self.assertRaises(errors.LoadBalanceNotSupported):
+            with self._connect() as conn:
+                cur = conn.cursor()
+                cur.execute('SELECT set_load_balance_policy(\'None\')')
+
+            with self._connect():
+                pass
