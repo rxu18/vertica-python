@@ -150,7 +150,7 @@ class Connection(object):
         self.socket = None
 
     def _socket(self):
-        if self.socket is not None:
+        if self.socket:
             return self.socket
 
         address_q = self.get_address_q()
@@ -159,12 +159,12 @@ class Connection(object):
 
         load_balance_options = self.options.get('connection_load_balance')
         logger.debug('Load Balance:: Option set by the user: {0}'.format(load_balance_options))
-        if load_balance_options is not None and load_balance_options is not False:
+        if load_balance_options:
             raw_socket, host = self.balance_load(raw_socket, address_q)
 
         ssl_options = self.options.get('ssl')
         logger.debug('SSL:: Option set by the user: {0}'.format(ssl_options))
-        if ssl_options is not None and ssl_options is not False:
+        if ssl_options:
             raw_socket = self.enable_ssl(host, raw_socket, ssl_options)
 
         self.socket = raw_socket
@@ -176,7 +176,7 @@ class Connection(object):
         ports = self.options.get('port')
 
         if isinstance(hosts, list) and isinstance(ports, list):
-            if len(hosts) != len(ports) or len(hosts) == 0:
+            if len(hosts) != len(ports) or not hosts:
                 err_msg = 'Hosts and ports cannot be empty and must be equal in number'
                 logger.error(err_msg)
                 raise errors.ConnectionError(err_msg)
@@ -252,7 +252,7 @@ class Connection(object):
         host = address_q[0][0]
         raw_socket = self.create_socket()
         exception = None
-        while len(address_q) > 0:
+        while address_q:
             exception = None
             host, port = address_q[0]
             try:
