@@ -7,14 +7,14 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         super(LoadBalanceTestCase, cls).setUpClass()
         with cls._connect() as conn:
             cur = conn.cursor()
-            cur.execute('SELECT set_load_balance_policy(\'ROUNDROBIN\')')
+            cur.execute("SELECT set_load_balance_policy('ROUNDROBIN')")
 
     @classmethod
     def tearDownClass(cls):
         super(LoadBalanceTestCase, cls).tearDownClass()
         with cls._connect() as conn:
             cur = conn.cursor()
-            cur.execute('SELECT set_load_balance_policy(\'NONE\')')
+            cur.execute("SELECT set_load_balance_policy('NONE')")
 
     def tearDown(self):
         self._conn_info['host'] = self._host
@@ -80,7 +80,7 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         with self.assertRaises(errors.ConnectionError):
             with self._connect() as conn:
                 cur = conn.cursor()
-                cur.execute('SELECT set_load_balance_policy(\'None\')')
+                cur.execute("SELECT set_load_balance_policy('None')")
 
             with self._connect():
                 pass
@@ -89,7 +89,7 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         self._conn_info['connection_load_balance'] = False
         with self._connect() as conn:
             cur = conn.cursor()
-            cur.execute('SELECT set_load_balance_policy(\'ROUNDROBIN\')')
+            cur.execute("SELECT set_load_balance_policy('ROUNDROBIN')")
 
     def test_loadbalance_host_str_port_list_type_mismatch(self):
         self._conn_info['host'] = self._host
