@@ -51,6 +51,7 @@ from ..vertica.messages.message import BackendMessage, FrontendMessage
 from ..vertica.messages.frontend_messages import CancelRequest
 
 from collections import deque
+import six
 
 logger = logging.getLogger('vertica')
 
@@ -152,19 +153,14 @@ class Connection(object):
         if self.socket is not None:
             return self.socket
 
-        hosts_q = self.get_queue('host')
-        ports_q = self.get_queue('port')
-        if len(hosts_q) != len(ports_q) or len(hosts_q) == 0:
-            err_msg = 'Hosts and ports cannot be empty and must be equal in number'
-            logger.error(err_msg)
-            raise errors.ConnectionError(err_msg)
+        address_q = self.get_address_q()
 
-        raw_socket, host = self.try_connecting(hosts_q, ports_q)
+        raw_socket, host = self.try_connecting(address_q)
 
         load_balance_options = self.options.get('connection_load_balance')
         logger.debug('Load Balance:: Option set by the user: {0}'.format(load_balance_options))
         if load_balance_options is not None and load_balance_options is not False:
-            raw_socket, host = self.balance_load(raw_socket, hosts_q, ports_q)
+            raw_socket, host = self.balance_load(raw_socket, address_q)
 
         ssl_options = self.options.get('ssl')
         logger.debug('SSL:: Option set by the user: {0}'.format(ssl_options))
@@ -174,13 +170,28 @@ class Connection(object):
         self.socket = raw_socket
         return self.socket
 
-    def get_queue(self, option):
-        list_ = self.options.get(option)
-        if type(list_) != list:
-            q = deque([list_])
+    def get_address_q(self):
+
+        hosts = self.options.get('host')
+        ports = self.options.get('port')
+
+        if isinstance(hosts, list) and isinstance(ports, list):
+            if len(hosts) != len(ports) or len(hosts) == 0:
+                err_msg = 'Hosts and ports cannot be empty and must be equal in number'
+                logger.error(err_msg)
+                raise errors.ConnectionError(err_msg)
+            else:
+                address_q = deque(zip(hosts, ports))
+
         else:
-            q = deque(list_)
-        return q
+            if isinstance(hosts, six.string_types) and isinstance(ports, int):
+                address_q = deque([(hosts, ports)])
+            else:
+                err_msg = 'Host {0} must be string and port {1} must be integer'.format(hosts, ports)
+                logger.error(err_msg)
+                raise TypeError(err_msg)
+
+        return address_q
 
     def create_socket(self):
         logger.info('Creating a new socket for connection')
@@ -212,7 +223,7 @@ class Connection(object):
             raise errors.SSLNotSupported(err_msg)
         return raw_socket
 
-    def balance_load(self, raw_socket, hosts_q, ports_q):
+    def balance_load(self, raw_socket, address_q):
         raw_socket.sendall(messages.LoadBalanceRequest().get_message())
         load_balance = raw_socket.recv(1)
         logger.debug('Load Balance::Server response: {0}'.format(load_balance))
@@ -227,25 +238,23 @@ class Connection(object):
             host = res.get_host()
             port = res.get_port()
 
-            hosts_q.appendleft(host)
-            ports_q.appendleft(port)
+            address_q.appendleft((host, port))
 
             raw_socket.close()
-            raw_socket, host = self.try_connecting(hosts_q, ports_q)
+            raw_socket, host = self.try_connecting(address_q)
         else:
             err_msg = "Load balance requested but not supported by server"
             logger.error(err_msg)
             raise errors.LoadBalanceNotSupported(err_msg)
         return raw_socket, host
 
-    def try_connecting(self, hosts_q, ports_q):
-        host = hosts_q[0]
+    def try_connecting(self, address_q):
+        host = address_q[0][0]
         raw_socket = self.create_socket()
         exception = None
-        while len(hosts_q) > 0 and len(ports_q) > 0:
+        while len(address_q) > 0:
             exception = None
-            host = hosts_q[0]
-            port = ports_q[0]
+            host, port = address_q[0]
             try:
                 logger.info('Attempting to connect to host {0} listening on port {1}'.format(host, port))
                 raw_socket.connect((host, port))
@@ -253,12 +262,9 @@ class Connection(object):
             except Exception as ex:
                 logger.info('Failed to connect to host {0} listening on port {1}'.format(host, port))
                 exception = ex
-                hosts_q.popleft()
-                ports_q.popleft()
-
+                address_q.popleft()
                 raw_socket.close()
                 raw_socket = self.create_socket()
-                pass
 
         # if last attempt was failure raise exception
         if exception:
