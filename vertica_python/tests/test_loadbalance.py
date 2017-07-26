@@ -24,32 +24,25 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
 
     def test_loadbalance_option_not_set(self):
         with self._connect() as conn:
-            self.assertTrue(conn.socket is not None)
-            pass
+            self.assertIsNotNone(conn.socket)
 
     def test_loadbalance_true(self):
         self._conn_info['connection_load_balance'] = True
+        with self._connect() as conn1, self._connect() as conn2:
+            cur1 = conn1.cursor()
+            cur1.execute('SELECT node_name from current_session')
+            node1 = cur1.fetchone()
 
-        conn1 = self._connect()
-        cur1 = conn1.cursor()
-        cur1.execute('SELECT node_name from current_session')
-        node1 = cur1.fetchone()
+            cur2 = conn2.cursor()
+            cur2.execute('SELECT node_name from current_session')
+            node2 = cur2.fetchone()
 
-        conn2 = self._connect()
-        cur2 = conn2.cursor()
-        cur2.execute('SELECT node_name from current_session')
-        node2 = cur2.fetchone()
-
-        self.assertNotEqual(node1, node2)
-
-        conn1.close()
-        conn2.close()
+            self.assertNotEqual(node1, node2)
 
     def test_loadbalance_false(self):
         self._conn_info['connection_load_balance'] = False
         with self._connect() as conn:
-            self.assertTrue(conn.socket is not None)
-            pass
+            self.assertIsNotNone(conn.socket)
 
     def test_failover_first_host_port_invalid(self):
         self._conn_info['host'] = ['invalid', self._host]
@@ -57,8 +50,7 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         self._conn_info['port'] = [port, port]
 
         with self._connect() as conn:
-            self.assertTrue(conn.socket is not None)
-            pass
+            self.assertIsNotNone(conn.socket)
 
     def test_failover_both_host_port_invalid(self):
         self._conn_info['host'] = ['invalid', 'invalid']
@@ -92,3 +84,9 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
 
             with self._connect():
                 pass
+
+        #Reset load balance back to roundrobin
+        self._conn_info['connection_load_balance'] = False
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT set_load_balance_policy(\'ROUNDROBIN\')')
