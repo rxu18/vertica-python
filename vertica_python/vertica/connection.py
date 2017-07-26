@@ -16,7 +16,7 @@ from ..vertica.messages.message import BackendMessage, FrontendMessage
 from ..vertica.messages.frontend_messages import CancelRequest
 
 from collections import deque
-import six
+from six import string_types
 
 logger = logging.getLogger('vertica')
 
@@ -149,7 +149,7 @@ class Connection(object):
                 address_q = deque(zip(hosts, ports))
 
         else:
-            if isinstance(hosts, six.string_types) and isinstance(ports, int):
+            if isinstance(hosts, string_types) and isinstance(ports, int):
                 address_q = deque([(hosts, ports)])
             else:
                 err_msg = 'Host {0} must be string and port {1} must be integer'.format(hosts, ports)
