@@ -227,6 +227,7 @@ class Connection(object):
         raw_socket.sendall(messages.LoadBalanceRequest().get_message())
         load_balance = raw_socket.recv(1)
         logger.debug('Load Balance::Server response: {0}'.format(load_balance))
+        host = address_q[0][0]
         if load_balance in (b'Y', 'Y'):
             logger.info('Load Balance::Starting')
             size = unpack('!I', raw_socket.recv(4))[0]
@@ -242,10 +243,7 @@ class Connection(object):
 
             raw_socket.close()
             raw_socket, host = self.try_connecting(address_q)
-        else:
-            err_msg = "Load balance requested but not supported by server"
-            logger.error(err_msg)
-            raise errors.LoadBalanceNotSupported(err_msg)
+
         return raw_socket, host
 
     def try_connecting(self, address_q):

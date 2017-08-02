@@ -99,10 +99,6 @@ class SSLNotSupported(ConnectionError):
     pass
 
 
-class LoadBalanceNotSupported(ConnectionError):
-    pass
-
-
 class MessageError(InternalError):
     pass
 
