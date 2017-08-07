@@ -170,8 +170,16 @@ class Connection(object):
         self.socket = raw_socket
         return self.socket
 
-    def get_address_q(self):
+    @classmethod
+    def host_port_valid(cls, host, port):
+        if isinstance(host, string_types) and isinstance(port, int):
+            return True
+        else:
+            err_msg = 'Host {0} must be string and port {1} must be integer'.format(host, port)
+            logger.error(err_msg)
+            raise TypeError(err_msg)
 
+    def get_address_q(self):
         hosts = self.options.get('host')
         ports = self.options.get('port')
 
@@ -181,15 +189,11 @@ class Connection(object):
                 logger.error(err_msg)
                 raise errors.ConnectionError(err_msg)
             else:
-                address_q = deque(zip(hosts, ports))
+                address_q = deque([(host, port) for host, port in zip(hosts, ports)
+                                   if Connection.host_port_valid(host, port)])
 
-        else:
-            if isinstance(hosts, string_types) and isinstance(ports, int):
+        elif Connection.host_port_valid(hosts, ports):
                 address_q = deque([(hosts, ports)])
-            else:
-                err_msg = 'Host {0} must be string and port {1} must be integer'.format(hosts, ports)
-                logger.error(err_msg)
-                raise TypeError(err_msg)
 
         return address_q
 
