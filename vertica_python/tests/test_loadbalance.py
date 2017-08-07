@@ -52,10 +52,32 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         with self._connect() as conn:
             self.assertIsNotNone(conn.socket)
 
-    def test_failover_both_host_port_invalid(self):
+    def test_failover_both_host_port_list_elements_invalid(self):
         self._conn_info['host'] = ['invalid', 'invalid']
         port = self._conn_info['port']
         self._conn_info['port'] = [port, port]
+
+        with self.assertRaises(errors.ConnectionError):
+            with self._connect():
+                pass
+
+    def test_failover_individual_host_port_invalid(self):
+        self._conn_info['host'] = 'invalid'
+        self._conn_info['port'] = 'invalid'
+
+        with self.assertRaises(errors.ConnectionError):
+            with self._connect():
+                pass
+
+    def test_failover_individual_port_invalid(self):
+        self._conn_info['port'] = 'invalid'
+
+        with self.assertRaises(errors.ConnectionError):
+            with self._connect():
+                pass
+
+    def test_failover_individual_host_invalid(self):
+        self._conn_info['host'] = 'invalid'
 
         with self.assertRaises(errors.ConnectionError):
             with self._connect():
