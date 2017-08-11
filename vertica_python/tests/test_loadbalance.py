@@ -104,8 +104,8 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
             cur = conn.cursor()
             cur.execute("SELECT set_load_balance_policy('None')")
 
-        with self._connect():
-            pass
+        with self._connect() as conn:
+            self.assertIsNotNone(conn.socket)
 
         #Reset load balance back to roundrobin
         self._conn_info['connection_load_balance'] = False
