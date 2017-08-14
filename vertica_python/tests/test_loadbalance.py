@@ -1,6 +1,7 @@
 from .base import VerticaPythonTestCase
 from .. import errors
 
+
 class LoadBalanceTestCase(VerticaPythonTestCase):
     @classmethod
     def setUpClass(cls):
@@ -15,6 +16,7 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         with cls._connect() as conn:
             cur = conn.cursor()
             cur.execute("SELECT set_load_balance_policy('NONE')")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
 
     def tearDown(self):
         self._conn_info['host'] = self._host
@@ -26,18 +28,71 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         with self._connect() as conn:
             self.assertIsNotNone(conn.socket)
 
-    def test_loadbalance_true(self):
+    def test_loadbalance_roundrobin(self):
         self._conn_info['connection_load_balance'] = True
-        with self._connect() as conn1, self._connect() as conn2:
-            cur1 = conn1.cursor()
-            cur1.execute('SELECT node_name from current_session')
-            node1 = cur1.fetchone()
+        rows = 9
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
+            cur.execute("CREATE TABLE test_loadbalanceADO (n varchar)")
 
-            cur2 = conn2.cursor()
-            cur2.execute('SELECT node_name from current_session')
-            node2 = cur2.fetchone()
+            for i in range(rows):
+                with self._connect() as conn1:
+                    cur1 = conn1.cursor()
+                    cur1.execute("INSERT INTO test_loadbalanceADO (SELECT node_name FROM sessions WHERE session_id = "
+                                 "(SELECT current_session()))")
 
-            self.assertNotEqual(node1, node2)
+            cur.execute("SELECT count(n)=3 FROM test_loadbalanceADO GROUP BY n ")
+            self.assertTrue(cur.fetchone())
+            self.assertTrue(cur.fetchone())
+            self.assertTrue(cur.fetchone())
+
+            # teardown
+            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
+
+    def test_loadbalance_random(self):
+        self._conn_info['connection_load_balance'] = True
+        rows = 10
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT set_load_balance_policy('RANDOM')")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
+            cur.execute("CREATE TABLE test_loadbalanceADO (n varchar)")
+
+            for i in range(rows):
+                with self._connect() as conn1:
+                    cur1 = conn1.cursor()
+                    cur1.execute("INSERT INTO test_loadbalanceADO (SELECT node_name FROM sessions WHERE session_id = "
+                                 "(SELECT current_session()))")
+
+            cur.execute("SELECT (count(DISTINCT nodes.node_name)=1) or (count(DISTINCT test_loadbalanceADO.n)=1)"
+                        "  FROM nodes, test_loadbalanceADO")
+            self.assertTrue(cur.fetchone())
+
+            # teardown
+            cur.execute("SELECT set_load_balance_policy('ROUNDROBIN')")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
+
+    def test_loadbalance_none(self):
+        rows = 10
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT set_load_balance_policy('NONE')")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
+            cur.execute("CREATE TABLE test_loadbalanceADO (n varchar)")
+
+            for i in range(rows):
+                with self._connect() as conn1:
+                    cur1 = conn1.cursor()
+                    cur1.execute("INSERT INTO test_loadbalanceADO (SELECT node_name FROM sessions WHERE session_id = "
+                                 "(SELECT current_session()))")
+
+            cur.execute("SELECT (count(DISTINCT test_loadbalanceADO.n)=1) FROM test_loadbalanceADO")
+            self.assertTrue(cur.fetchone())
+
+            # teardown
+            cur.execute("SELECT set_load_balance_policy('ROUNDROBIN')")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
 
     def test_loadbalance_false(self):
         self._conn_info['connection_load_balance'] = False
@@ -107,7 +162,7 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         with self._connect() as conn:
             self.assertIsNotNone(conn.socket)
 
-        #Reset load balance back to roundrobin
+        # Reset load balance back to roundrobin
         self._conn_info['connection_load_balance'] = False
         with self._connect() as conn:
             cur = conn.cursor()
