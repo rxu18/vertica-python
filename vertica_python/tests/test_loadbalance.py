@@ -152,14 +152,14 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
             with self._connect():
                 pass
 
-    def test_loadbalance_when_no_host_port_are_provided(self):
+    def test_failover_when_no_host_port_are_provided(self):
         self._conn_info['host'] = []
         self._conn_info['port'] = []
         with self.assertRaises(errors.ConnectionError):
             with self._connect():
                 pass
 
-    def test_loadbalance_when_host_port_length_doesnt_match(self):
+    def test_failover_when_host_port_length_doesnt_match(self):
         self._conn_info['host'] = [self._host]
         self._conn_info['port'] = [self._port, self._port]
         with self.assertRaises(errors.ConnectionError):
@@ -182,7 +182,7 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
             cur = conn.cursor()
             cur.execute("SELECT set_load_balance_policy('ROUNDROBIN')")
 
-    def test_loadbalance_host_str_port_list_type_mismatch(self):
+    def test_failover_host_str_port_list_type_mismatch(self):
         self._conn_info['host'] = self._host
         self._conn_info['port'] = [self._port]
 
@@ -190,10 +190,16 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
             with self._connect():
                 pass
 
-    def test_loadbalance_host_str_port_str_type_mismatch(self):
+    def test_failover_individual_host_port_str_type(self):
         self._conn_info['host'] = self._host
         self._conn_info['port'] = str(self._port)
 
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
-                pass
+        with self._connect() as conn:
+            self.assertIsNotNone(conn.socket)
+
+    def test_failover_list_host_port_str_type(self):
+        self._conn_info['host'] = self._host + "," + self._host
+        self._conn_info['port'] = str(self._port) + "," + str(self._port)
+
+        with self._connect() as conn:
+            self.assertIsNotNone(conn.socket)
