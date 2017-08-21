@@ -147,6 +147,16 @@ class Connection(object):
     def get_address_q(self):
         hosts = self.options.get('host')
         ports = self.options.get('port')
+        address_q = None
+
+        if isinstance(hosts, string_types) and isinstance(ports, string_types):
+            hosts = hosts.split(',')
+            try:
+                ports = [int(port) for port in ports.split(',')]
+            except:
+                err_msg = 'Invalid format {0} for ports'.format(ports)
+                logger.error(err_msg)
+                raise TypeError(err_msg)
 
         if isinstance(hosts, list) and isinstance(ports, list):
             if len(hosts) != len(ports) or not hosts:
