@@ -1,10 +1,14 @@
-from ..message import BulkFrontendMessage
+from __future__ import print_function, division, absolute_import
+
 from struct import pack
 
-class LoadBalanceRequest(BulkFrontendMessage):
-    def __init__(self):
-        BulkFrontendMessage.__init__(self)
+from ..message import BulkFrontendMessage
 
-    def get_message(self):
-        bytes_ = pack('!i2h', 8, 1235, 0)
+
+class LoadBalanceRequest(BulkFrontendMessage):
+    message_id = None
+    LOADBALANCE_REQUEST = 80936960
+
+    def read_bytes(self):
+        bytes_ = pack('!I', self.LOADBALANCE_REQUEST)
         return bytes_
