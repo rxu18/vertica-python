@@ -2,17 +2,19 @@ from __future__ import print_function, division, absolute_import
 
 import os
 import unittest
+import getpass
 
 from six import string_types
 
 from .. import *
 from ..compat import as_text, as_str, as_bytes
+from .. import errors
 
 DEFAULT_VP_TEST_HOST = '127.0.0.1'
 DEFAULT_VP_TEST_PORT = 5433
-DEFAULT_VP_TEST_USER = 'dbadmin'
+DEFAULT_VP_TEST_USER = getpass.getuser()
 DEFAULT_VP_TEST_PASSWD = ''
-DEFAULT_VP_TEST_DB = 'docker'
+DEFAULT_VP_TEST_DB = DEFAULT_VP_TEST_USER
 DEFAULT_VP_TEST_TABLE = 'vertica_python_unit_test'
 
 
@@ -101,3 +103,16 @@ class VerticaPythonTestCase(unittest.TestCase):
         self.assertEqual(len(list1), len(list2), msg=msg)
         for l1, l2 in zip(list1, list2):
             self.assertListEqual(l1, l2, msg=msg)
+
+    def assertConnectionFail(self):
+        err_msg = 'Failed to establish a connection to the primary server or any backup address.'
+        with self.assertRaisesRegexp(errors.ConnectionError, err_msg):
+            with self._connect() as conn:
+                pass
+
+    def assertConnectionSuccess(self):
+        try:
+            with self._connect() as conn:
+                pass
+        except Exception as e:
+            self.fail('Connection failed: {0}'.format(e))

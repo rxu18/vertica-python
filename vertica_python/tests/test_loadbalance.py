@@ -1,205 +1,241 @@
 from .base import VerticaPythonTestCase
 from .. import errors
+import unittest
 
 
 class LoadBalanceTestCase(VerticaPythonTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(LoadBalanceTestCase, cls).setUpClass()
-        with cls._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT set_load_balance_policy('ROUNDROBIN')")
-
-    @classmethod
-    def tearDownClass(cls):
-        super(LoadBalanceTestCase, cls).tearDownClass()
-        with cls._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT set_load_balance_policy('NONE')")
-            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
-
     def tearDown(self):
         self._conn_info['host'] = self._host
         self._conn_info['port'] = self._port
-        if 'connection_load_balance' in self._conn_info:
-            del self._conn_info['connection_load_balance']
+        self._conn_info['connection_load_balance'] = False
+        self._conn_info['backup_server_node'] = []
 
-    def test_loadbalance_option_not_set(self):
-        with self._connect() as conn:
-            self.assertIsNotNone(conn.socket)
-
-    def test_loadbalance_roundrobin(self):
-        self._conn_info['connection_load_balance'] = True
-        rows = 9
-        with self._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
-            cur.execute("CREATE TABLE test_loadbalanceADO (n varchar)")
-
-            for i in range(rows):
-                with self._connect() as conn1:
-                    cur1 = conn1.cursor()
-                    cur1.execute("INSERT INTO test_loadbalanceADO (SELECT node_name FROM sessions WHERE session_id = "
-                                 "(SELECT current_session()))")
-
-            cur.execute("SELECT count(n)=3 FROM test_loadbalanceADO GROUP BY n ")
-            self.assertTrue(cur.fetchone())
-            self.assertTrue(cur.fetchone())
-            self.assertTrue(cur.fetchone())
-
-            # teardown
-            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
-
-    def test_loadbalance_random(self):
-        self._conn_info['connection_load_balance'] = True
-        rows = 10
-        with self._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT set_load_balance_policy('RANDOM')")
-            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
-            cur.execute("CREATE TABLE test_loadbalanceADO (n varchar)")
-
-            for i in range(rows):
-                with self._connect() as conn1:
-                    cur1 = conn1.cursor()
-                    cur1.execute("INSERT INTO test_loadbalanceADO (SELECT node_name FROM sessions WHERE session_id = "
-                                 "(SELECT current_session()))")
-
-            cur.execute("SELECT (count(DISTINCT nodes.node_name)=1) or (count(DISTINCT test_loadbalanceADO.n)=1)"
-                        "  FROM nodes, test_loadbalanceADO")
-            self.assertTrue(cur.fetchone())
-
-            # teardown
-            cur.execute("SELECT set_load_balance_policy('ROUNDROBIN')")
-            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
-
-    def test_loadbalance_none(self):
-        rows = 10
         with self._connect() as conn:
             cur = conn.cursor()
             cur.execute("SELECT set_load_balance_policy('NONE')")
-            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
-            cur.execute("CREATE TABLE test_loadbalanceADO (n varchar)")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalance")
 
-            for i in range(rows):
+    def get_node_num(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT count(*) FROM nodes WHERE node_state='UP'")
+            db_node_num = cur.fetchone()[0]
+            return db_node_num
+
+    def test_loadbalance_option_disabled(self):
+        if 'connection_load_balance' in self._conn_info:
+            del self._conn_info['connection_load_balance']
+        self.assertConnectionSuccess()
+
+        self._conn_info['connection_load_balance'] = False
+        self.assertConnectionSuccess()
+
+    def test_loadbalance_random(self):
+        db_node_num = self.get_node_num()
+        if db_node_num < 2:
+            raise unittest.SkipTest("This test requires a multi-node DB, the DB has only "
+                                    "{0} available node(s).".format(db_node_num))
+
+        self._conn_info['connection_load_balance'] = True
+        rowsToInsert = 3 * db_node_num
+
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT set_load_balance_policy('RANDOM')")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalance")
+            cur.execute("CREATE TABLE test_loadbalance (n varchar)")
+            # record which node the client has connected to
+            for i in range(rowsToInsert):
                 with self._connect() as conn1:
                     cur1 = conn1.cursor()
-                    cur1.execute("INSERT INTO test_loadbalanceADO (SELECT node_name FROM sessions WHERE session_id = "
-                                 "(SELECT current_session()))")
+                    cur1.execute("INSERT INTO test_loadbalance (SELECT node_name FROM sessions "
+                                 "WHERE session_id = (SELECT current_session()))")
 
-            cur.execute("SELECT (count(DISTINCT test_loadbalanceADO.n)=1) FROM test_loadbalanceADO")
-            self.assertTrue(cur.fetchone())
+            cur.execute("SELECT count(DISTINCT n)>1 FROM test_loadbalance")
+            res = cur.fetchone()
+            self.assertTrue(res[0])
 
-            # teardown
+    def test_loadbalance_none(self):
+        db_node_num = self.get_node_num()
+        if db_node_num < 2:
+            raise unittest.SkipTest("This test requires a multi-node DB, the DB has only "
+                                    "{0} available node(s).".format(db_node_num))
+
+        self._conn_info['connection_load_balance'] = True
+        rowsToInsert = 3 * db_node_num
+
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT set_load_balance_policy('NONE')")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalance")
+            cur.execute("CREATE TABLE test_loadbalance (n varchar)")
+            # record which node the client has connected to
+            for i in range(rowsToInsert):
+                with self._connect() as conn1:
+                    cur1 = conn1.cursor()
+                    cur1.execute("INSERT INTO test_loadbalance (SELECT node_name FROM sessions "
+                                 "WHERE session_id = (SELECT current_session()))")
+
+            cur.execute("SELECT count(DISTINCT n)=1 FROM test_loadbalance")
+            res = cur.fetchone()
+            self.assertTrue(res[0])
+
+    def test_loadbalance_roundrobin(self):
+        db_node_num = self.get_node_num()
+        if db_node_num < 2:
+            raise unittest.SkipTest("This test requires a multi-node DB, the DB has only "
+                                    "{0} available node(s).".format(db_node_num))
+
+        self._conn_info['connection_load_balance'] = True
+        rowsToInsert = 3 * db_node_num
+
+        with self._connect() as conn:
+            cur = conn.cursor()
             cur.execute("SELECT set_load_balance_policy('ROUNDROBIN')")
-            cur.execute("DROP TABLE IF EXISTS test_loadbalanceADO")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalance")
+            cur.execute("CREATE TABLE test_loadbalance (n varchar)")
+            # record which node the client has connected to
+            for i in range(rowsToInsert):
+                with self._connect() as conn1:
+                    cur1 = conn1.cursor()
+                    cur1.execute("INSERT INTO test_loadbalance (SELECT node_name FROM sessions "
+                                 "WHERE session_id = (SELECT current_session()))")
 
-    def test_loadbalance_false(self):
-        self._conn_info['connection_load_balance'] = False
-        with self._connect() as conn:
-            self.assertIsNotNone(conn.socket)
+            cur.execute("SELECT count(n)=3 FROM test_loadbalance GROUP BY n")
+            res = cur.fetchall()
+            # verify that all db_node_num nodes are represented equally
+            self.assertEqual(len(res), db_node_num)
+            for i in res:
+                self.assertEqual(i, [True])
 
-    def test_failover_first_host_port_incorrect(self):
-        self._conn_info['host'] = ['incorrect', self._host]
-        port = self._conn_info['port']
-        self._conn_info['port'] = [port, port]
+    def test_failover_empty_backup(self):
+        # Connect to primary server
+        if 'backup_server_node' in self._conn_info:
+            del self._conn_info['backup_server_node']
+        self.assertConnectionSuccess()
+        self._conn_info['backup_server_node'] = []
+        self.assertConnectionSuccess()
 
-        with self._connect() as conn:
-            self.assertIsNotNone(conn.socket)
-
-    def test_failover_both_host_port_list_elements_incorrect(self):
-        self._conn_info['host'] = ['incorrect', 'incorrect']
-        port = self._conn_info['port']
-        self._conn_info['port'] = [port, port]
-
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
-                pass
-
-    def test_failover_individual_host_port_invalid(self):
-        self._conn_info['host'] = 0
-        self._conn_info['port'] = 'invalid'
-
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
-                pass
-
-    def test_failover_individual_port_invalid(self):
-        self._conn_info['port'] = 'invalid'
-
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
-                pass
-
-    def test_failover_individual_port_incorrect(self):
+        # Set primary server to invalid host and port
+        self._conn_info['host'] = 'invalidhost'
         self._conn_info['port'] = 9999
 
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
+        # Fail to connect to primary server
+        self.assertConnectionFail()
+
+    def test_failover_one_backup(self):
+        # Set primary server to invalid host and port
+        self._conn_info['host'] = 'invalidhost'
+        self._conn_info['port'] = 9999
+
+        # One valid address in backup_server_node
+        self._conn_info['backup_server_node'] = [(self._host, self._port)]
+        self.assertConnectionSuccess()
+
+        # One invalid address in backup_server_node: DNS failed, Name or service not known
+        self._conn_info['backup_server_node'] = [('invalidhost2', 8888)]
+        self.assertConnectionFail()
+
+        # One invalid address in backup_server_node: DNS failed, Name or service not known
+        self._conn_info['backup_server_node'] = [('123.456.789.123', 8888)]
+        self.assertConnectionFail()
+
+        # One invalid address in backup_server_node: DNS failed, Address family for hostname not supported
+        self._conn_info['backup_server_node'] = [('fd76:6572:7469:6361:0:242:ac11:4', 8888)]
+        self.assertConnectionFail()
+
+        # One invalid address in backup_server_node: Wrong port, connection refused
+        self._conn_info['backup_server_node'] = [(self._host, 8888)]
+        self.assertConnectionFail()
+
+    def test_failover_multi_backup(self):
+        # Set primary server to invalid host and port
+        self._conn_info['host'] = 'invalidhost'
+        self._conn_info['port'] = 9999
+
+        # One valid and two invalid addresses in backup_server_node
+        self._conn_info['backup_server_node'] = [(self._host, self._port), 'invalidhost2','foo']
+        self.assertConnectionSuccess()
+        self._conn_info['backup_server_node'] = ['foo', (self._host, self._port), ('123.456.789.1', 888)]
+        self.assertConnectionSuccess()
+        self._conn_info['backup_server_node'] = ['foo', ('invalidhost2', 8888), (self._host, self._port)]
+        self.assertConnectionSuccess()
+
+        # Three invalid addresses in backup_server_node
+        self._conn_info['backup_server_node'] = ['foo', (self._host, 9999), ('123.456.789.1', 888)]
+        self.assertConnectionFail()
+
+    def test_failover_backup_format(self):
+        # Set primary server to invalid host and port
+        self._conn_info['host'] = 'invalidhost'
+        self._conn_info['port'] = 9999
+
+        err_msg = 'Connection option "backup_server_node" must be a list'
+        with self.assertRaisesRegexp(TypeError, err_msg):
+            self._conn_info['backup_server_node'] = (self._host, self._port)
+            with self._connect() as conn:
                 pass
 
-    def test_failover_individual_host_invalid(self):
-        self._conn_info['host'] = 0
-
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
+        err_msg = ('Each item of connection option "backup_server_node"'
+                   ' must be a host string or a \(host, port\) tuple')
+        with self.assertRaisesRegexp(TypeError, err_msg):
+            self._conn_info['backup_server_node'] = [9999]
+            with self._connect() as conn:
                 pass
 
-    def test_failover_individual_host_incorrect(self):
-        self._conn_info['host'] = 'incorrect'
-
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
+        with self.assertRaisesRegexp(TypeError, err_msg):
+            self._conn_info['backup_server_node'] = [(self._host, self._port, 'foo', 9999)]
+            with self._connect() as conn:
                 pass
 
-    def test_failover_when_no_host_port_are_provided(self):
-        self._conn_info['host'] = []
-        self._conn_info['port'] = []
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
+        err_msg = 'Host .* must be a string and port .* must be an integer'
+        with self.assertRaisesRegexp(TypeError, err_msg):
+            self._conn_info['backup_server_node'] = [(self._host, 'port_num')]
+            with self._connect() as conn:
                 pass
 
-    def test_failover_when_host_port_length_doesnt_match(self):
-        self._conn_info['host'] = [self._host]
-        self._conn_info['port'] = [self._port, self._port]
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
+        with self.assertRaisesRegexp(TypeError, err_msg):
+            self._conn_info['backup_server_node'] = [(9999, self._port)]
+            with self._connect() as conn:
                 pass
 
-    def test_loadbalance_when_server_doesnt_support_loadbalance(self):
+        with self.assertRaisesRegexp(TypeError, err_msg):
+            self._conn_info['backup_server_node'] = [(9999, 'port_num')]
+            with self._connect() as conn:
+                pass
+
+    def test_failover_with_loadbalance_roundrobin(self):
+        db_node_num = self.get_node_num()
+        if db_node_num < 2:
+            raise unittest.SkipTest("This test requires a multi-node DB, the DB has only "
+                                    "{0} available node(s).".format(db_node_num))
+
+        # Set primary server to invalid host and port
+        self._conn_info['host'] = 'invalidhost'
+        self._conn_info['port'] = 9999
+        self.assertConnectionFail()
+
+        self._conn_info['backup_server_node'] = [('invalidhost2', 8888), (self._host, self._port)]
+        self.assertConnectionSuccess()
+
         self._conn_info['connection_load_balance'] = True
+        rowsToInsert = 3 * db_node_num
 
-        with self._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT set_load_balance_policy('None')")
-
-        with self._connect() as conn:
-            self.assertIsNotNone(conn.socket)
-
-        # Reset load balance back to roundrobin
-        self._conn_info['connection_load_balance'] = False
         with self._connect() as conn:
             cur = conn.cursor()
             cur.execute("SELECT set_load_balance_policy('ROUNDROBIN')")
+            cur.execute("DROP TABLE IF EXISTS test_loadbalance")
+            cur.execute("CREATE TABLE test_loadbalance (n varchar)")
+            # record which node the client has connected to
+            for i in range(rowsToInsert):
+                with self._connect() as conn1:
+                    cur1 = conn1.cursor()
+                    cur1.execute("INSERT INTO test_loadbalance (SELECT node_name FROM sessions "
+                                 "WHERE session_id = (SELECT current_session()))")
 
-    def test_failover_host_str_port_list_type_mismatch(self):
-        self._conn_info['host'] = self._host
-        self._conn_info['port'] = [self._port]
-
-        with self.assertRaises(errors.ConnectionError):
-            with self._connect():
-                pass
-
-    def test_failover_individual_host_port_str_type(self):
-        self._conn_info['host'] = self._host
-        self._conn_info['port'] = str(self._port)
-
-        with self._connect() as conn:
-            self.assertIsNotNone(conn.socket)
-
-    def test_failover_list_host_port_str_type(self):
-        self._conn_info['host'] = self._host + "," + self._host
-        self._conn_info['port'] = str(self._port) + "," + str(self._port)
-
-        with self._connect() as conn:
-            self.assertIsNotNone(conn.socket)
+            cur.execute("SELECT count(n)=3 FROM test_loadbalance GROUP BY n")
+            res = cur.fetchall()
+            # verify that all db_node_num nodes are represented equally
+            self.assertEqual(len(res), db_node_num)
+            for i in res:
+                self.assertEqual(i, [True])
