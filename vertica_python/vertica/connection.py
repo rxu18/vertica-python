@@ -38,11 +38,13 @@ from __future__ import print_function, division, absolute_import
 import logging
 import socket
 import ssl
+import os
+import errno
 from struct import unpack
 
 # noinspection PyCompatibility,PyUnresolvedReferences
 from builtins import str
-from six import raise_from
+from six import raise_from, string_types, integer_types
 
 from .. import errors
 from ..vertica import messages
@@ -51,16 +53,104 @@ from ..vertica.messages.message import BackendMessage, FrontendMessage
 from ..vertica.messages.frontend_messages import CancelRequest
 
 from collections import deque
-from six import string_types
 
 logger = logging.getLogger('vertica')
 
+DEFAULT_LOG_LEVEL = logging.WARNING
+DEFAULT_LOG_PATH = 'vertica_python.log'
 ASCII = 'ascii'
+DEFAULT_PORT = 5433
 
 
 def connect(**kwargs):
     """Opens a new connection to a Vertica database."""
     return Connection(kwargs)
+
+
+def ensure_dir_exists(filepath):
+    """Ensure that a directory exists
+
+    If it doesn't exist, try to create it and protect against a race condition
+    if another process is doing the same.
+    """
+    directory = os.path.dirname(filepath)
+    if directory != '' and not os.path.exists(directory):
+        try:
+            os.makedirs(directory)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+
+
+class _AddressList(object):
+    def __init__(self, host, port, backup_nodes):
+        """Creates a new deque with the primary host first, followed by any backup hosts"""
+        # Format of items in deque: (host, port, is_dns_resolved)
+        self.address_deque = deque()
+
+        # load primary host into address_deque
+        self._append(host, port)
+
+        # load backup nodes into address_deque
+        if not isinstance(backup_nodes, list):
+            err_msg = 'Connection option "backup_server_node" must be a list'
+            logger.error(err_msg)
+            raise TypeError(err_msg)
+
+        # Each item in backup_nodes should be either
+        # a host name or IP address string (using default port) or
+        # a (host, port) tuple
+        for node in backup_nodes:
+            if isinstance(node, string_types):
+                self._append(node, DEFAULT_PORT)
+            elif isinstance(node, tuple) and len(node) == 2:
+                self._append(node[0], node[1])
+            else:
+                err_msg = ('Each item of connection option "backup_server_node"'
+                           ' must be a host string or a (host, port) tuple')
+                logger.error(err_msg)
+                raise TypeError(err_msg)
+
+    def _append(self, host, port):
+        if isinstance(host, string_types) and isinstance(port, integer_types):
+            self.address_deque.append((host, port, False))
+        else:
+            err_msg = 'Host {0} must be a string and port {1} must be an integer'.format(host, port)
+            logger.error(err_msg)
+            raise TypeError(err_msg)
+
+    def push(self, host, port):
+        self.address_deque.appendleft((host, port, False))
+
+    def pop(self):
+        self.address_deque.popleft()
+
+    def peek(self):
+        # do lazy DNS resolution, return the leftmost DNS-resolved address
+        if len(self.address_deque) == 0:
+            return None
+
+        while len(self.address_deque) > 0:
+            host, port, is_dns_resolved = self.address_deque[0]
+            if is_dns_resolved:
+                # return a resolved address
+                logger.debug('Peek at address list: {0}'.format(list(self.address_deque)))
+                return (host, port)
+            else:
+                # DNS resolve a single host name to multiple IP addresses
+                self.address_deque.popleft()
+                try:
+                    resolved_hosts = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+                except Exception as e:
+                    logger.warning('Error resolving host {0} on port {1}: {2}'.format(host, port, e))
+                    continue
+
+                # add resolved IP addresses to deque
+                for res in reversed(resolved_hosts):
+                    family, socktype, proto, canonname, sockaddr = res
+                    self.address_deque.appendleft((sockaddr[0], sockaddr[1], True))
+
+        return None
 
 
 class Connection(object):
@@ -78,9 +168,36 @@ class Connection(object):
         # we only support one cursor per connection
         self.options.setdefault('unicode_error', None)
         self._cursor = Cursor(self, None, unicode_error=self.options['unicode_error'])
-        self.options.setdefault('port', 5433)
+        self.options.setdefault('port', DEFAULT_PORT)
+        self.options.setdefault('password', '')
         self.options.setdefault('read_timeout', 600)
+
+        # Set up logger
+        if 'log_level' not in self.options and 'log_path' not in self.options:
+            # logger is disabled by default
+            logger.disabled = True
+        else:
+            self.options.setdefault('log_level', DEFAULT_LOG_LEVEL)
+            self.options.setdefault('log_path', DEFAULT_LOG_PATH)
+            ensure_dir_exists(self.options['log_path'])
+            logging.basicConfig(datefmt='%Y-%m-%d %I:%M:%S',
+                    format='%(asctime)s.%(msecs)03d [%(module)s] <%(levelname)s> %(message)s',
+                    level=self.options['log_level'],
+                    filename=self.options['log_path'])
+
+        for required_option in ('host', 'database', 'user'):
+            if required_option not in self.options:
+                err_msg = 'Connection option "{0}" is required'.format(required_option)
+                logger.error(err_msg)
+                raise errors.ConnectionError(err_msg)
+        self.address_list = _AddressList(self.options['host'], self.options['port'],
+                                         self.options.get('backup_server_node', []))
+
+        logger.info('Connecting as user {0} to database {1} on host {2} and port {3}'.format(
+                     self.options['user'], self.options['database'],
+                     self.options['host'], self.options['port']))
         self.startup_connection()
+        logger.info('Connection is ready')
 
     def __enter__(self):
         return self
@@ -148,82 +265,83 @@ class Connection(object):
         self.backend_key = None
         self.transaction_status = None
         self.socket = None
+        self.address_list = _AddressList(self.options['host'], self.options['port'],
+                                         self.options.get('backup_server_node', []))
 
     def _socket(self):
         if self.socket:
             return self.socket
 
-        address_q = self.get_address_q()
+        # the initial establishment of the client connection
+        raw_socket = self.establish_connection()
 
-        raw_socket, host = self.try_connecting(address_q)
-
+        # enable load balancing
         load_balance_options = self.options.get('connection_load_balance')
-        logger.debug('Load Balance:: Option set by the user: {0}'.format(load_balance_options))
+        logger.debug('Connection load balance option is {0}'.format(
+                     'enabled' if load_balance_options else 'disabled'))
         if load_balance_options:
-            raw_socket, host = self.balance_load(raw_socket, address_q)
+            raw_socket = self.balance_load(raw_socket)
 
+        # enable SSL
         ssl_options = self.options.get('ssl')
-        logger.debug('SSL:: Option set by the user: {0}'.format(ssl_options))
+        logger.debug('SSL option is {0}'.format('enabled' if ssl_options else 'disabled'))
         if ssl_options:
-            raw_socket = self.enable_ssl(host, raw_socket, ssl_options)
+            raw_socket = self.enable_ssl(raw_socket, ssl_options)
 
         self.socket = raw_socket
         return self.socket
 
-    @classmethod
-    def host_port_valid(cls, host, port):
-        if isinstance(host, string_types) and isinstance(port, int):
-            return True
-        else:
-            err_msg = 'Host {0} must be string and port {1} must be integer'.format(host, port)
-            logger.error(err_msg)
-            raise TypeError(err_msg)
-
-    def get_address_q(self):
-        hosts = self.options.get('host')
-        ports = self.options.get('port')
-        address_q = None
-
-        if isinstance(hosts, string_types) and isinstance(ports, string_types):
-            hosts = hosts.split(',')
-            try:
-                ports = [int(port) for port in ports.split(',')]
-            except:
-                err_msg = 'Invalid format {0} for ports'.format(ports)
-                logger.error(err_msg)
-                raise TypeError(err_msg)
-
-        if isinstance(hosts, list) and isinstance(ports, list):
-            if len(hosts) != len(ports) or not hosts:
-                err_msg = 'Hosts and ports cannot be empty and must be equal in number'
-                logger.error(err_msg)
-                raise errors.ConnectionError(err_msg)
-            else:
-                address_q = deque([(host, port) for host, port in zip(hosts, ports)
-                                   if Connection.host_port_valid(host, port)])
-
-        elif Connection.host_port_valid(hosts, ports):
-                address_q = deque([(hosts, ports)])
-
-        return address_q
-
     def create_socket(self):
-        logger.info('Creating a new socket for connection')
+        # Address family IPv6 (socket.AF_INET6) is not supported
         raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         raw_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         connection_timeout = self.options.get('connection_timeout')
         if connection_timeout is not None:
-            logger.info('Setting socket connection timeout: {0}'.format(connection_timeout))
+            logger.debug('Set socket connection timeout: {0}'.format(connection_timeout))
             raw_socket.settimeout(connection_timeout)
         return raw_socket
 
-    def enable_ssl(self, host, raw_socket, ssl_options):
+    def balance_load(self, raw_socket):
+        # Send load balance request and read server response
+        raw_socket.sendall(messages.LoadBalanceRequest().get_message())
+        response = raw_socket.recv(1)
+
+        if response in (b'Y', 'Y'):
+            size = unpack('!I', raw_socket.recv(4))[0]
+            if size < 4:
+                err_msg = "Bad message size: {0}".format(size)
+                logger.error(err_msg)
+                raise errors.MessageError(err_msg)
+            res = BackendMessage.from_type(type_=response, data=raw_socket.recv(size-4))
+            host = res.get_host()
+            port = res.get_port()
+            logger.info('Load balancing to host {0} on port {1}'.format(host, port))
+
+            socket_host, socket_port = raw_socket.getpeername()
+            if host == socket_host and port == socket_port:
+                logger.info('Already connecting to host {0} on port {1}. Ignore load balancing.'.format(host, port))
+                return raw_socket
+
+            # Push the new host onto the address list before connecting again. Note that this
+            # will leave the originally-specified host as the first failover possibility.
+            self.address_list.push(host, port)
+            raw_socket.close()
+            raw_socket = self.establish_connection()
+        else:
+            logger.warning("Load balancing requested but not supported by server")
+
+        return raw_socket
+
+    def enable_ssl(self, raw_socket, ssl_options):
         from ssl import CertificateError, SSLError
+        # Send SSL request and read server response
         raw_socket.sendall(messages.SslRequest().get_message())
         response = raw_socket.recv(1)
         if response in ('S', b'S'):
+            logger.info('Enabling SSL')
             try:
                 if isinstance(ssl_options, ssl.SSLContext):
+                    host, port = raw_socket.getpeername()
                     raw_socket = ssl_options.wrap_socket(raw_socket, server_hostname=host)
                 else:
                     raw_socket = ssl.wrap_socket(raw_socket)
@@ -237,53 +355,35 @@ class Connection(object):
             raise errors.SSLNotSupported(err_msg)
         return raw_socket
 
-    def balance_load(self, raw_socket, address_q):
-        raw_socket.sendall(messages.LoadBalanceRequest().get_message())
-        load_balance = raw_socket.recv(1)
-        logger.debug('Load Balance::Server response: {0}'.format(load_balance))
-        host = address_q[0][0]
-        if load_balance in (b'Y', 'Y'):
-            logger.info('Load Balance::Starting')
-            size = unpack('!I', raw_socket.recv(4))[0]
-            if size < 4:
-                err_msg = "Bad message size: {0}".format(size)
-                logger.error(err_msg)
-                raise errors.MessageError(err_msg)
-            res = BackendMessage.from_type(type_=load_balance, data=raw_socket.recv(size-4))
-            host = res.get_host()
-            port = res.get_port()
+    def establish_connection(self):
+        addr = self.address_list.peek()
+        raw_socket = None
+        last_exception = None
 
-            address_q.appendleft((host, port))
+        # Failover: loop to try all addresses
+        while addr:
+            last_exception = None
+            host, port = addr
 
-            raw_socket.close()
-            raw_socket, host = self.try_connecting(address_q)
-
-        return raw_socket, host
-
-    def try_connecting(self, address_q):
-        host = address_q[0][0]
-        raw_socket = self.create_socket()
-        exception = None
-        while address_q:
-            exception = None
-            host, port = address_q[0]
+            logger.info("Establishing connection to host {0} on port {1}".format(host, port))
             try:
-                logger.info('Attempting to connect to host {0} listening on port {1}'.format(host, port))
+                raw_socket = self.create_socket()
                 raw_socket.connect((host, port))
                 break
-            except Exception as ex:
-                logger.info('Failed to connect to host {0} listening on port {1}'.format(host, port))
-                exception = ex
-                address_q.popleft()
+            except Exception as e:
+                logger.info('Failed to connect to host {0} on port {1}: {2}'.format(host, port, e))
+                last_exception = e
+                self.address_list.pop()
+                addr = self.address_list.peek()
                 raw_socket.close()
-                raw_socket = self.create_socket()
 
-        # if last attempt was failure raise exception
-        if exception:
-            logger.error('Could not connect to any of the hosts')
-            raise exception
+        # all of the addresses failed
+        if raw_socket is None or last_exception:
+            err_msg = 'Failed to establish a connection to the primary server or any backup address.'
+            logger.error(err_msg)
+            raise errors.ConnectionError(err_msg)
 
-        return raw_socket, host
+        return raw_socket
 
     def ssl(self):
         return self.socket is not None and isinstance(self.socket, ssl.SSLSocket)
@@ -301,11 +401,11 @@ class Connection(object):
             raise TypeError("invalid message: ({0})".format(message))
 
         logger.debug('=> %s', message)
-
+        sock = self._socket()
         try:
             for data in message.fetch_message():
                 try:
-                    self._socket().sendall(data)
+                    sock.sendall(data)
                 except Exception:
                     logger.error("couldn't send message")
                     raise

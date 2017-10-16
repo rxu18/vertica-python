@@ -34,10 +34,10 @@
 
 from __future__ import print_function, division, absolute_import
 
-from .base import VerticaPythonTestCase
+from .base import VerticaPythonIntegrationTestCase
 
 
-class ColumnTestCase(VerticaPythonTestCase):
+class ColumnTestCase(VerticaPythonIntegrationTestCase):
     def test_column_names_query(self):
         columns = ['isocode', 'name']
 

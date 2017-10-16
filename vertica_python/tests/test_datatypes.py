@@ -36,10 +36,10 @@ from __future__ import print_function, division, absolute_import
 
 from decimal import Decimal
 
-from .base import VerticaPythonTestCase
+from .base import VerticaPythonIntegrationTestCase
 
 
-class TypeTestCase(VerticaPythonTestCase):
+class TypeTestCase(VerticaPythonIntegrationTestCase):
     def test_decimal_query(self):
         value = Decimal(0.42)
         query = "SELECT {0}::numeric".format(value)

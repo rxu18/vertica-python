@@ -37,7 +37,8 @@ from __future__ import print_function, division, absolute_import
 from collections import namedtuple
 from datetime import date, datetime
 
-from .base import VerticaPythonTestCase
+from .base import VerticaPythonIntegrationTestCase
+from .base import VerticaPythonUnitTestCase
 from .. import errors
 from ..vertica.column import timestamp_parse
 
@@ -45,7 +46,7 @@ DateTestingCase = namedtuple("DateTestingCase", ["string", "template", "date"])
 TimestampTestingCase = namedtuple("TimestampTestingCase", ["string", "timestamp"])
 
 
-class DateParsingTestCase(VerticaPythonTestCase):
+class DateParsingTestCase(VerticaPythonIntegrationTestCase):
     """Testing DATE type parsing with focus on 'AD'/'BC'.
 
     Note: the 'BC' or 'AD' era indicators in Vertica's date format seem to make Vertica behave as
@@ -154,7 +155,7 @@ class DateParsingTestCase(VerticaPythonTestCase):
         self._test_not_supported(test_cases=test_cases, msg='BC indicator -> BC indicator')
 
 
-class TimestampParsingTestCase(VerticaPythonTestCase):
+class TimestampParsingTestCase(VerticaPythonUnitTestCase):
     def _test_timestamps(self, test_cases, msg=None):
         for tc in test_cases:
             self.assertEqual(timestamp_parse(tc.string), tc.timestamp, msg=msg)
@@ -215,7 +216,7 @@ class TimestampParsingTestCase(VerticaPythonTestCase):
         self._test_timestamps(test_cases=test_cases, msg='timestamp microsecond resolution')
 
     def test_timestamp_year_over_9999_second_resolution(self):
-        """Asserts that years over 9999 are truncated to 9999"""
+        # Asserts that years over 9999 are truncated to 9999
         test_cases = [
             TimestampTestingCase(
                 '19850-10-26 01:25:01',
