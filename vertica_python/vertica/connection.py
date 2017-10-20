@@ -3,6 +3,8 @@ from __future__ import print_function, division, absolute_import
 import logging
 import socket
 import ssl
+import os
+import errno
 from struct import unpack
 
 # noinspection PyCompatibility,PyUnresolvedReferences
@@ -19,12 +21,28 @@ from collections import deque
 
 logger = logging.getLogger('vertica')
 
+DEFAULT_LOG_LEVEL = logging.WARNING
+DEFAULT_LOG_PATH = 'vertica_python.log'
 ASCII = 'ascii'
 DEFAULT_PORT = 5433
 
 def connect(**kwargs):
     """Opens a new connection to a Vertica database."""
     return Connection(kwargs)
+
+def ensure_dir_exists(filepath):
+    """Ensure that a directory exists
+
+    If it doesn't exist, try to create it and protect against a race condition
+    if another process is doing the same.
+    """
+    directory = os.path.dirname(filepath)
+    if directory != '' and not os.path.exists(directory):
+        try:
+            os.makedirs(directory)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
 
 class _AddressList(object):
     def __init__(self, host, port, backup_nodes):
@@ -114,6 +132,20 @@ class Connection(object):
         self._cursor = Cursor(self, None, unicode_error=self.options['unicode_error'])
         self.options.setdefault('port', DEFAULT_PORT)
         self.options.setdefault('read_timeout', 600)
+
+        # Set up logger
+        if 'log_level' not in self.options and 'log_path' not in self.options:
+            # logger is disabled by default
+            logger.disabled = True
+        else:
+            self.options.setdefault('log_level', DEFAULT_LOG_LEVEL)
+            self.options.setdefault('log_path', DEFAULT_LOG_PATH)
+            ensure_dir_exists(self.options['log_path'])
+            logging.basicConfig(datefmt='%Y-%m-%d %I:%M:%S',
+                    format='%(asctime)s.%(msecs)03d [%(module)s] <%(levelname)s> %(message)s',
+                    level=self.options['log_level'],
+                    filename=self.options['log_path'])
+
         for required_option in ('host', 'database', 'user', 'password'):
             if required_option not in self.options:
                 err_msg = 'Connection option "{0}" is required'.format(required_option)
