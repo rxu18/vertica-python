@@ -30,6 +30,11 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         self._conn_info['connection_load_balance'] = False
         self.assertConnectionSuccess()
 
+    def test_loadbalance_server_unsupported(self):
+        # Server load_balance_policy is NONE
+        self._conn_info['connection_load_balance'] = True
+        self.assertConnectionSuccess()
+
     def test_loadbalance_random(self):
         db_node_num = self.get_node_num()
         if db_node_num < 2:
