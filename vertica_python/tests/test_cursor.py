@@ -1,6 +1,7 @@
 from __future__ import print_function, division, absolute_import
 
 import logging
+import os as _os
 import tempfile
 
 from .base import VerticaPythonTestCase
@@ -153,7 +154,12 @@ class CursorTestCase(VerticaPythonTestCase):
             self.assertListOfListsEqual(res_from_cur2, [[2, 'bar']])
 
     def test_copy_with_file(self):
-        with tempfile.TemporaryFile() as f, self._connect() as conn1, self._connect() as conn2:
+        with tempfile.TemporaryFile() as tmpfile, self._connect() as conn1, self._connect() as conn2:
+            if _os.name != 'posix' or _os.sys.platform == 'cygwin':
+                f = getattr(tmpfile, 'file')
+            else:
+                f = tmpfile
+
             f.write(b"1,foo\n2,bar")
             # move rw pointer to top of file
             f.seek(0)
@@ -350,3 +356,48 @@ class CursorTestCase(VerticaPythonTestCase):
             cur.execute("")
             res = cur.fetchall()
             self.assertListOfListsEqual(res, [])
+
+
+class TestExecutemany(VerticaPythonTestCase):
+    def setUp(self):
+        self._init_table()
+
+    def tearDown(self):
+        # self._init_table()
+        pass
+
+    def _init_table(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            # clean old table
+            cur.execute("DROP TABLE IF EXISTS {0}".format(self._table))
+
+            # create test table
+            cur.execute("""CREATE TABLE {0} (
+                                a INT,
+                                b VARCHAR(32)
+                           )
+                        """.format(self._table))
+
+    def _test_executemany(self, table, seq_of_values):
+        with self._connect() as conn:
+            cur = conn.cursor()
+
+            cur.executemany("INSERT INTO {0} (a, b) VALUES (%s, %s)".format(table),
+                            seq_of_values)
+            conn.commit()
+
+            cur.execute("SELECT * FROM {0} ORDER BY a ASC, b ASC".format(table))
+
+            # check first select results
+            res1 = cur.fetchall()
+            seq_of_values_to_compare = sorted([list(values) for values in seq_of_values])
+            self.assertListOfListsEqual(res1, seq_of_values_to_compare)
+            self.assertIsNone(cur.fetchone())
+
+    def test_executemany(self):
+        self._test_executemany(self._table, [(1, 'aa'), (2, 'bb')])
+
+    def test_executemany_quoted_path(self):
+        table = '.'.join(['"{}"'.format(s.strip('"')) for s in self._table.split('.')])
+        self._test_executemany(table, [(1, 'aa'), (2, 'bb')])
