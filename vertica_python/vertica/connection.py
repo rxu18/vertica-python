@@ -26,9 +26,11 @@ DEFAULT_LOG_PATH = 'vertica_python.log'
 ASCII = 'ascii'
 DEFAULT_PORT = 5433
 
+
 def connect(**kwargs):
     """Opens a new connection to a Vertica database."""
     return Connection(kwargs)
+
 
 def ensure_dir_exists(filepath):
     """Ensure that a directory exists
@@ -44,9 +46,10 @@ def ensure_dir_exists(filepath):
             if e.errno != errno.EEXIST:
                 raise
 
+
 class _AddressList(object):
     def __init__(self, host, port, backup_nodes):
-        '''Creates a new deque with the primary host first, followed by any backup hosts'''
+        """Creates a new deque with the primary host first, followed by any backup hosts"""
         # Format of items in deque: (host, port, is_dns_resolved)
         self.address_deque = deque()
 
