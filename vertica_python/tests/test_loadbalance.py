@@ -30,11 +30,6 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
         self._conn_info['connection_load_balance'] = False
         self.assertConnectionSuccess()
 
-    def test_loadbalance_server_unsupported(self):
-        # Server load_balance_policy is NONE
-        self._conn_info['connection_load_balance'] = True
-        self.assertConnectionSuccess()
-
     def test_loadbalance_random(self):
         db_node_num = self.get_node_num()
         if db_node_num < 2:
@@ -62,16 +57,24 @@ class LoadBalanceTestCase(VerticaPythonTestCase):
 
     def test_loadbalance_none(self):
         db_node_num = self.get_node_num()
+
+        # Client turns on connection_load_balance but server is unsupported
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT set_load_balance_policy('NONE')")
+        self._conn_info['connection_load_balance'] = True
+
+        # Client will proceed with the existing connection with initiator
+        self.assertConnectionSuccess()
+
+        # Test for multi-node DB
         if db_node_num < 2:
             raise unittest.SkipTest("This test requires a multi-node DB, the DB has only "
                                     "{0} available node(s).".format(db_node_num))
-
-        self._conn_info['connection_load_balance'] = True
         rowsToInsert = 3 * db_node_num
 
         with self._connect() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT set_load_balance_policy('NONE')")
             cur.execute("DROP TABLE IF EXISTS test_loadbalance")
             cur.execute("CREATE TABLE test_loadbalance (n varchar)")
             # record which node the client has connected to
