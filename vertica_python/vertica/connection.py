@@ -134,6 +134,7 @@ class Connection(object):
         self.options.setdefault('unicode_error', None)
         self._cursor = Cursor(self, None, unicode_error=self.options['unicode_error'])
         self.options.setdefault('port', DEFAULT_PORT)
+        self.options.setdefault('password', '')
         self.options.setdefault('read_timeout', 600)
 
         # Set up logger
@@ -149,7 +150,7 @@ class Connection(object):
                     level=self.options['log_level'],
                     filename=self.options['log_path'])
 
-        for required_option in ('host', 'database', 'user', 'password'):
+        for required_option in ('host', 'database', 'user'):
             if required_option not in self.options:
                 err_msg = 'Connection option "{0}" is required'.format(required_option)
                 logger.error(err_msg)
