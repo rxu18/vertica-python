@@ -18,8 +18,14 @@ DEFAULT_VP_TEST_DB = DEFAULT_VP_TEST_USER
 DEFAULT_VP_TEST_TABLE = 'vertica_python_unit_test'
 
 
-class VerticaPythonTestCase(unittest.TestCase):
-    """Base class for tests that query Vertica."""
+class VerticaPythonIntegrationTestCase(unittest.TestCase):
+    """
+    Base class for tests that connect to a Vertica database to run stuffs.
+
+    This class is responsible for managing the environment variables and
+    connection info used for all the tests, and provides support code
+    to do common assertions and execute common queries.
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -78,6 +84,7 @@ class VerticaPythonTestCase(unittest.TestCase):
 
         return result
 
+    # Common assertions
     def assertTextEqual(self, first, second, msg=None):
         first_text = as_text(first)
         second_text = as_text(second)

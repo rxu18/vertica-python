@@ -4,12 +4,12 @@ from collections import namedtuple
 from datetime import datetime
 import pytz
 
-from .base import VerticaPythonTestCase
+from .base import VerticaPythonIntegrationTestCase
 
 TimeZoneTestingCase = namedtuple("TimeZoneTestingCase", ["string", "template", "timestamp"])
 
 
-class TimeZoneTestCase(VerticaPythonTestCase):
+class TimeZoneTestCase(VerticaPythonIntegrationTestCase):
     def _test_ts(self, test_cases):
         with self._connect() as conn:
             cur = conn.cursor()

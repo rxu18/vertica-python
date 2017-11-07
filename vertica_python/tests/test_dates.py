@@ -3,7 +3,7 @@ from __future__ import print_function, division, absolute_import
 from collections import namedtuple
 from datetime import date, datetime
 
-from .base import VerticaPythonTestCase
+from .base import VerticaPythonIntegrationTestCase
 from .. import errors
 from ..vertica.column import timestamp_parse
 
@@ -11,7 +11,7 @@ DateTestingCase = namedtuple("DateTestingCase", ["string", "template", "date"])
 TimestampTestingCase = namedtuple("TimestampTestingCase", ["string", "timestamp"])
 
 
-class DateParsingTestCase(VerticaPythonTestCase):
+class DateParsingTestCase(VerticaPythonIntegrationTestCase):
     """Testing DATE type parsing with focus on 'AD'/'BC'.
 
     Note: the 'BC' or 'AD' era indicators in Vertica's date format seem to make Vertica behave as
@@ -120,7 +120,7 @@ class DateParsingTestCase(VerticaPythonTestCase):
         self._test_not_supported(test_cases=test_cases, msg='BC indicator -> BC indicator')
 
 
-class TimestampParsingTestCase(VerticaPythonTestCase):
+class TimestampParsingTestCase(VerticaPythonIntegrationTestCase):
     def _test_timestamps(self, test_cases, msg=None):
         for tc in test_cases:
             self.assertEqual(timestamp_parse(tc.string), tc.timestamp, msg=msg)

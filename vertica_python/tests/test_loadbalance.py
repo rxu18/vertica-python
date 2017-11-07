@@ -1,9 +1,9 @@
-from .base import VerticaPythonTestCase
+from .base import VerticaPythonIntegrationTestCase
 from .. import errors
 import unittest
 
 
-class LoadBalanceTestCase(VerticaPythonTestCase):
+class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
     def tearDown(self):
         self._conn_info['host'] = self._host
         self._conn_info['port'] = self._port

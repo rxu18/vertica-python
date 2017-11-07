@@ -4,13 +4,13 @@ import logging
 import os as _os
 import tempfile
 
-from .base import VerticaPythonTestCase
+from .base import VerticaPythonIntegrationTestCase
 from .. import errors
 
 logger = logging.getLogger('vertica')
 
 
-class CursorTestCase(VerticaPythonTestCase):
+class CursorTestCase(VerticaPythonIntegrationTestCase):
     def setUp(self):
         self._init_table()
 
@@ -358,7 +358,7 @@ class CursorTestCase(VerticaPythonTestCase):
             self.assertListOfListsEqual(res, [])
 
 
-class TestExecutemany(VerticaPythonTestCase):
+class TestExecutemany(VerticaPythonIntegrationTestCase):
     def setUp(self):
         self._init_table()
 

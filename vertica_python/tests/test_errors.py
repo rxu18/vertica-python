@@ -1,11 +1,11 @@
 from __future__ import print_function, division, absolute_import
 
-from .base import VerticaPythonTestCase
+from .base import VerticaPythonIntegrationTestCase
 
 from .. import errors
 
 
-class ErrorTestCase(VerticaPythonTestCase):
+class ErrorTestCase(VerticaPythonIntegrationTestCase):
     def setUp(self):
         with self._connect() as conn:
             cur = conn.cursor()
