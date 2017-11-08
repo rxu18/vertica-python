@@ -43,6 +43,7 @@ class VerticaPythonIntegrationTestCase(unittest.TestCase):
             'user': cls._user,
             'password': cls._password,
         }
+        cls.db_node_num = cls._get_node_num()
 
     @classmethod
     def tearDownClass(cls):
@@ -57,6 +58,13 @@ class VerticaPythonIntegrationTestCase(unittest.TestCase):
         :return: a connection to vertica.
         """
         return connect(**cls._conn_info)
+
+    @classmethod
+    def _get_node_num(cls):
+        with cls._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT count(*) FROM nodes WHERE node_state='UP'")
+            return cur.fetchone()[0]
 
     def _query_and_fetchall(self, query):
         """Creates a new connection, executes a query and fetches all the results.
@@ -123,3 +131,20 @@ class VerticaPythonIntegrationTestCase(unittest.TestCase):
                 pass
         except Exception as e:
             self.fail('Connection failed: {0}'.format(e))
+
+    # Some tests require server-side setup
+    # In that case, tests that depend on that setup should be skipped to prevent false failures
+    # Tests that depend on the server-setup should call these methods to express requirements
+    def require_DB_nodes_at_least(self, min_node_num):
+        if not isinstance(min_node_num, int):
+            err_msg = "Node number '{0}' must be an instance of 'int'".format(min_node_num)
+            raise TypeError(err_msg)
+        if min_node_num <= 0:
+            err_msg = "Node number {0} must be a positive integer".format(min_node_num)
+            raise ValueError(err_msg)
+
+        if self.db_node_num < min_node_num:
+            msg = ("The test requires a database that has at least {0} node(s), "
+                   "but this database has only {1} available node(s).").format(
+                   min_node_num, self.db_node_num)
+            self.skipTest(msg)

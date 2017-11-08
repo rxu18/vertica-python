@@ -31,13 +31,9 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
         self.assertConnectionSuccess()
 
     def test_loadbalance_random(self):
-        db_node_num = self.get_node_num()
-        if db_node_num < 2:
-            raise unittest.SkipTest("This test requires a multi-node DB, the DB has only "
-                                    "{0} available node(s).".format(db_node_num))
-
+        self.require_DB_nodes_at_least(3)
         self._conn_info['connection_load_balance'] = True
-        rowsToInsert = 3 * db_node_num
+        rowsToInsert = 3 * self.db_node_num
 
         with self._connect() as conn:
             cur = conn.cursor()
@@ -56,8 +52,6 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
             self.assertTrue(res[0])
 
     def test_loadbalance_none(self):
-        db_node_num = self.get_node_num()
-
         # Client turns on connection_load_balance but server is unsupported
         with self._connect() as conn:
             cur = conn.cursor()
@@ -68,10 +62,8 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
         self.assertConnectionSuccess()
 
         # Test for multi-node DB
-        if db_node_num < 2:
-            raise unittest.SkipTest("This test requires a multi-node DB, the DB has only "
-                                    "{0} available node(s).".format(db_node_num))
-        rowsToInsert = 3 * db_node_num
+        self.require_DB_nodes_at_least(3)
+        rowsToInsert = 3 * self.db_node_num
 
         with self._connect() as conn:
             cur = conn.cursor()
@@ -89,13 +81,9 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
             self.assertTrue(res[0])
 
     def test_loadbalance_roundrobin(self):
-        db_node_num = self.get_node_num()
-        if db_node_num < 2:
-            raise unittest.SkipTest("This test requires a multi-node DB, the DB has only "
-                                    "{0} available node(s).".format(db_node_num))
-
+        self.require_DB_nodes_at_least(3)
         self._conn_info['connection_load_balance'] = True
-        rowsToInsert = 3 * db_node_num
+        rowsToInsert = 3 * self.db_node_num
 
         with self._connect() as conn:
             cur = conn.cursor()
@@ -112,7 +100,7 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
             cur.execute("SELECT count(n)=3 FROM test_loadbalance GROUP BY n")
             res = cur.fetchall()
             # verify that all db_node_num nodes are represented equally
-            self.assertEqual(len(res), db_node_num)
+            self.assertEqual(len(res), self.db_node_num)
             for i in res:
                 self.assertEqual(i, [True])
 
@@ -213,10 +201,7 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
                 pass
 
     def test_failover_with_loadbalance_roundrobin(self):
-        db_node_num = self.get_node_num()
-        if db_node_num < 2:
-            raise unittest.SkipTest("This test requires a multi-node DB, the DB has only "
-                                    "{0} available node(s).".format(db_node_num))
+        self.require_DB_nodes_at_least(3)
 
         # Set primary server to invalid host and port
         self._conn_info['host'] = 'invalidhost'
@@ -227,7 +212,7 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
         self.assertConnectionSuccess()
 
         self._conn_info['connection_load_balance'] = True
-        rowsToInsert = 3 * db_node_num
+        rowsToInsert = 3 * self.db_node_num
 
         with self._connect() as conn:
             cur = conn.cursor()
@@ -244,6 +229,6 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
             cur.execute("SELECT count(n)=3 FROM test_loadbalance GROUP BY n")
             res = cur.fetchall()
             # verify that all db_node_num nodes are represented equally
-            self.assertEqual(len(res), db_node_num)
+            self.assertEqual(len(res), self.db_node_num)
             for i in res:
                 self.assertEqual(i, [True])

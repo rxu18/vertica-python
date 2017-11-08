@@ -181,7 +181,7 @@ class TimestampParsingTestCase(VerticaPythonIntegrationTestCase):
         self._test_timestamps(test_cases=test_cases, msg='timestamp microsecond resolution')
 
     def test_timestamp_year_over_9999_second_resolution(self):
-        """Asserts that years over 9999 are truncated to 9999"""
+        # Asserts that years over 9999 are truncated to 9999
         test_cases = [
             TimestampTestingCase(
                 '19850-10-26 01:25:01',
