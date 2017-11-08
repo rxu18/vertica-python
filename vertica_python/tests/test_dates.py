@@ -4,6 +4,7 @@ from collections import namedtuple
 from datetime import date, datetime
 
 from .base import VerticaPythonIntegrationTestCase
+from .base import VerticaPythonUnitTestCase
 from .. import errors
 from ..vertica.column import timestamp_parse
 
@@ -120,7 +121,7 @@ class DateParsingTestCase(VerticaPythonIntegrationTestCase):
         self._test_not_supported(test_cases=test_cases, msg='BC indicator -> BC indicator')
 
 
-class TimestampParsingTestCase(VerticaPythonIntegrationTestCase):
+class TimestampParsingTestCase(VerticaPythonUnitTestCase):
     def _test_timestamps(self, test_cases, msg=None):
         for tc in test_cases:
             self.assertEqual(timestamp_parse(tc.string), tc.timestamp, msg=msg)

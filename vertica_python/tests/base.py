@@ -2,6 +2,7 @@ from __future__ import print_function, division, absolute_import
 
 import os
 import unittest
+from nose.plugins.attrib import attr
 import getpass
 
 from six import string_types
@@ -17,7 +18,22 @@ DEFAULT_VP_TEST_PASSWD = ''
 DEFAULT_VP_TEST_DB = DEFAULT_VP_TEST_USER
 DEFAULT_VP_TEST_TABLE = 'vertica_python_unit_test'
 
+@attr('unit_tests')
+class VerticaPythonUnitTestCase(unittest.TestCase):
+    """
+    Base class for tests that do not require database connection;
+    simple unit testing of individual classes and functions
+    """
+    @classmethod
+    def setUpClass(cls):
+        pass
 
+    @classmethod
+    def tearDownClass(cls):
+        pass
+
+
+@attr('integration_tests')
 class VerticaPythonIntegrationTestCase(unittest.TestCase):
     """
     Base class for tests that connect to a Vertica database to run stuffs.
