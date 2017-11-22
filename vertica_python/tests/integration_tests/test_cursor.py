@@ -5,18 +5,13 @@ import os as _os
 import tempfile
 
 from .base import VerticaPythonIntegrationTestCase
-from .. import errors
-
-logger = logging.getLogger('vertica')
+from ... import errors
 
 
 class CursorTestCase(VerticaPythonIntegrationTestCase):
     def setUp(self):
+        super(CursorTestCase, self).setUp()
         self._init_table()
-
-    def tearDown(self):
-        # self._init_table()
-        pass
 
     def _init_table(self):
         with self._connect() as conn:
@@ -360,11 +355,8 @@ class CursorTestCase(VerticaPythonIntegrationTestCase):
 
 class TestExecutemany(VerticaPythonIntegrationTestCase):
     def setUp(self):
+        super(TestExecutemany, self).setUp()
         self._init_table()
-
-    def tearDown(self):
-        # self._init_table()
-        pass
 
     def _init_table(self):
         with self._connect() as conn:

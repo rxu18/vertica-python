@@ -2,14 +2,15 @@ from __future__ import print_function, division, absolute_import
 
 from .base import VerticaPythonIntegrationTestCase
 
-from .. import errors
+from ... import errors
 
 
 class ErrorTestCase(VerticaPythonIntegrationTestCase):
     def setUp(self):
+        super(ErrorTestCase, self).setUp()
         with self._connect() as conn:
             cur = conn.cursor()
-            cur.execute("DROP TABLE IF EXISTS {0}".format(self._table))
+            cur.execute("DROP TABLE IF EXISTS {0}".format(self.test_config['table']))
 
     def test_missing_schema(self):
         with self._connect() as conn:
@@ -26,6 +27,6 @@ class ErrorTestCase(VerticaPythonIntegrationTestCase):
     def test_duplicate_object(self):
         with self._connect() as conn:
             cur = conn.cursor()
-            cur.execute("CREATE TABLE {0} (a BOOLEAN)".format(self._table))
+            cur.execute("CREATE TABLE {0} (a BOOLEAN)".format(self.test_config['table']))
             with self.assertRaises(errors.DuplicateObject):
-                cur.execute("CREATE TABLE {0} (a BOOLEAN)".format(self._table))
+                cur.execute("CREATE TABLE {0} (a BOOLEAN)".format(self.test_config['table']))

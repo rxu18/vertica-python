@@ -1,40 +1,13 @@
 from __future__ import print_function, division, absolute_import
 
-import os
-import unittest
 from nose.plugins.attrib import attr
-import getpass
 
-from six import string_types
-
-from .. import *
-from ..compat import as_text, as_str, as_bytes
-from .. import errors
-
-DEFAULT_VP_TEST_HOST = '127.0.0.1'
-DEFAULT_VP_TEST_PORT = 5433
-DEFAULT_VP_TEST_USER = getpass.getuser()
-DEFAULT_VP_TEST_PASSWD = ''
-DEFAULT_VP_TEST_DB = DEFAULT_VP_TEST_USER
-DEFAULT_VP_TEST_TABLE = 'vertica_python_unit_test'
-
-@attr('unit_tests')
-class VerticaPythonUnitTestCase(unittest.TestCase):
-    """
-    Base class for tests that do not require database connection;
-    simple unit testing of individual classes and functions
-    """
-    @classmethod
-    def setUpClass(cls):
-        pass
-
-    @classmethod
-    def tearDownClass(cls):
-        pass
+from ... import errors, connect
+from ..common.base import VerticaPythonTestCase
 
 
 @attr('integration_tests')
-class VerticaPythonIntegrationTestCase(unittest.TestCase):
+class VerticaPythonIntegrationTestCase(VerticaPythonTestCase):
     """
     Base class for tests that connect to a Vertica database to run stuffs.
 
@@ -45,27 +18,35 @@ class VerticaPythonIntegrationTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._host = os.getenv('VP_TEST_HOST', DEFAULT_VP_TEST_HOST)
-        cls._port = int(os.getenv('VP_TEST_PORT', DEFAULT_VP_TEST_PORT))
-        cls._user = os.getenv('VP_TEST_USER', DEFAULT_VP_TEST_USER)
-        cls._password = os.getenv('VP_TEST_PASSWD', DEFAULT_VP_TEST_PASSWD)
-        cls._database = os.getenv('VP_TEST_DB', DEFAULT_VP_TEST_DB)
-        cls._table = os.getenv('VP_TEST_TABLE', DEFAULT_VP_TEST_TABLE)
+        config_list = ['log_dir', 'log_level', 'host', 'port',
+                       'user', 'password', 'database', 'table']
+        cls.test_config = cls._load_test_config(config_list)
+        
+        # TODO: delete this legacy variable
+        cls._table = cls.test_config['table']
 
+        # Test logger
+        logfile = cls._setup_logger('integration_tests', 
+                      cls.test_config['log_dir'], cls.test_config['log_level'])
+        
+        # Connection info
         cls._conn_info = {
-            'host': cls._host,
-            'port': cls._port,
-            'database': cls._database,
-            'user': cls._user,
-            'password': cls._password,
+            'host': cls.test_config['host'],
+            'port': cls.test_config['port'],
+            'database': cls.test_config['database'],
+            'user': cls.test_config['user'],
+            'password': cls.test_config['password'],
+            'log_level': cls.test_config['log_level'],
+            'log_path': logfile,
         }
         cls.db_node_num = cls._get_node_num()
+        cls.logger.info("Number of database node(s) = {}".format(cls.db_node_num))
 
     @classmethod
     def tearDownClass(cls):
         with cls._connect() as conn:
             cur = conn.cursor()
-            cur.execute("DROP TABLE IF EXISTS {0}".format(cls._table))
+            cur.execute("DROP TABLE IF EXISTS {0}".format(cls.test_config['table']))
 
     @classmethod
     def _connect(cls):
@@ -77,6 +58,10 @@ class VerticaPythonIntegrationTestCase(unittest.TestCase):
 
     @classmethod
     def _get_node_num(cls):
+        """Executes a query to get the number of nodes in the database
+
+        :return: the number of database nodes
+        """
         with cls._connect() as conn:
             cur = conn.cursor()
             cur.execute("SELECT count(*) FROM nodes WHERE node_state='UP'")
@@ -109,32 +94,6 @@ class VerticaPythonIntegrationTestCase(unittest.TestCase):
         return result
 
     # Common assertions
-    def assertTextEqual(self, first, second, msg=None):
-        first_text = as_text(first)
-        second_text = as_text(second)
-        self.assertEqual(first=first_text, second=second_text, msg=msg)
-
-    def assertStrEqual(self, first, second, msg=None):
-        first_str = as_str(first)
-        second_str = as_str(second)
-        self.assertEqual(first=first_str, second=second_str, msg=msg)
-
-    def assertBytesEqual(self, first, second, msg=None):
-        first_bytes = as_bytes(first)
-        second_bytes = as_bytes(second)
-        self.assertEqual(first=first_bytes, second=second_bytes, msg=msg)
-
-    def assertResultEqual(self, value, result, msg=None):
-        if isinstance(value, string_types):
-            self.assertTextEqual(first=value, second=result, msg=msg)
-        else:
-            self.assertEqual(first=value, second=result, msg=msg)
-
-    def assertListOfListsEqual(self, list1, list2, msg=None):
-        self.assertEqual(len(list1), len(list2), msg=msg)
-        for l1, l2 in zip(list1, list2):
-            self.assertListEqual(l1, l2, msg=msg)
-
     def assertConnectionFail(self):
         err_msg = 'Failed to establish a connection to the primary server or any backup address.'
         with self.assertRaisesRegexp(errors.ConnectionError, err_msg):

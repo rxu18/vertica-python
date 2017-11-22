@@ -1,9 +1,13 @@
-from .base import VerticaPythonIntegrationTestCase
-from .. import errors
-import unittest
+from __future__ import print_function, division, absolute_import
 
+from .base import VerticaPythonIntegrationTestCase
 
 class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
+    def setUp(self):
+        super(LoadBalanceTestCase, self).setUp()
+        self._host, self._port = self.test_config['host'], self.test_config['port']
+
+
     def tearDown(self):
         self._conn_info['host'] = self._host
         self._conn_info['port'] = self._port
@@ -14,6 +18,7 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
             cur = conn.cursor()
             cur.execute("SELECT set_load_balance_policy('NONE')")
             cur.execute("DROP TABLE IF EXISTS test_loadbalance")
+        super(LoadBalanceTestCase, self).tearDown()
 
     def get_node_num(self):
         with self._connect() as conn:
