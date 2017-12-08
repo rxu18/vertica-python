@@ -29,7 +29,7 @@ class Startup(BulkFrontendMessage):
         self._platform = platform.platform().encode(ASCII)
         self._pid = '{0}'.format(os.getpid()).encode(ASCII)
         self._label = self._type + b'-' + self._version + b'-' + str(uuid.uuid1()).encode(ASCII)
-        self._os_user_name = getpass.getuser()
+        self._os_user_name = getpass.getuser().encode(ASCII)
 
     def read_bytes(self):
         bytes_ = pack('!I', vertica_python.PROTOCOL_VERSION)
