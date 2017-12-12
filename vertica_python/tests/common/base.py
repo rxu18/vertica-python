@@ -23,7 +23,6 @@ default_configs = {
     'port': 5433,
     'user': getpass.getuser(),
     'password': '',
-    'database': getpass.getuser(),
     'table': 'vertica_python_unit_test',
 }
 
@@ -38,7 +37,8 @@ class VerticaPythonTestCase(unittest.TestCase):
 
         # load default configurations
         for key in config_list:
-            test_config[key] = default_configs[key]
+            if key != 'database':
+                test_config[key] = default_configs[key]
 
         # override with the configuration file
         confparser = ConfigParser()
@@ -63,6 +63,8 @@ class VerticaPythonTestCase(unittest.TestCase):
         # value is string when loaded from configuration file and environment variable
         if 'port' in test_config:
             test_config['port'] = int(test_config['port'])
+        if 'database' in config_list and 'user' in test_config:
+            test_config.setdefault('database', test_config['user'])
         if 'log_level' in test_config:
             levels = ['NOTSET', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
             if isinstance(test_config['log_level'], str):

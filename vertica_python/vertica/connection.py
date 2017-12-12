@@ -39,6 +39,7 @@ import logging
 import socket
 import ssl
 import os
+import getpass
 import errno
 import uuid
 from struct import unpack
@@ -55,7 +56,8 @@ from ..vertica.messages.message import BackendMessage, FrontendMessage
 from ..vertica.messages.frontend_messages import CancelRequest
 from ..vertica.log import VerticaLogging
 
-
+DEFAULT_HOST = 'localhost'
+DEFAULT_USER = getpass.getuser()
 DEFAULT_PORT = 5433
 DEFAULT_PASSWORD = ''
 DEFAULT_READ_TIMEOUT = 600
@@ -157,7 +159,10 @@ class Connection(object):
         options = options or {}
         self.options = {key: value for key, value in options.items() if value is not None}
 
+        self.options.setdefault('host', DEFAULT_HOST)
         self.options.setdefault('port', DEFAULT_PORT)
+        self.options.setdefault('user', DEFAULT_USER)
+        self.options.setdefault('database', self.options['user'])
         self.options.setdefault('password', DEFAULT_PASSWORD)
         self.options.setdefault('read_timeout', DEFAULT_READ_TIMEOUT)
 
@@ -174,11 +179,6 @@ class Connection(object):
             VerticaLogging.setup_file_logging(logger_name, self.options['log_path'],
                                               self.options['log_level'], id(self))
 
-        for required_option in ('host', 'database', 'user'):
-            if required_option not in self.options:
-                err_msg = 'Connection option "{0}" is required'.format(required_option)
-                self._logger.error(err_msg)
-                raise errors.ConnectionError(err_msg)
         self.address_list = _AddressList(self.options['host'], self.options['port'],
                                          self.options.get('backup_server_node', []), self._logger)
 
@@ -187,7 +187,7 @@ class Connection(object):
         self._cursor = Cursor(self, self._logger, cursor_type=None,
                               unicode_error=self.options['unicode_error'])
 
-        self._logger.info('Connecting as user {0} to database {1} on host {2} and port {3}'.format(
+        self._logger.info('Connecting as user "{0}" to database "{1}" on host "{2}" with port {3}'.format(
                      self.options['user'], self.options['database'],
                      self.options['host'], self.options['port']))
         self.startup_connection()
