@@ -129,8 +129,12 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
         self._conn_info['host'] = 'invalidhost'
         self._conn_info['port'] = 9999
 
-        # One valid address in backup_server_node
+        # One valid address in backup_server_node: port is an integer
         self._conn_info['backup_server_node'] = [(self._host, self._port)]
+        self.assertConnectionSuccess()
+
+        # One valid address in backup_server_node: port is a string
+        self._conn_info['backup_server_node'] = [(self._host, str(self._port))]
         self.assertConnectionSuccess()
 
         # One invalid address in backup_server_node: DNS failed, Name or service not known
@@ -189,12 +193,7 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
             with self._connect() as conn:
                 pass
 
-        err_msg = 'Host .* must be a string and port .* must be an integer'
-        with self.assertRaisesRegexp(TypeError, err_msg):
-            self._conn_info['backup_server_node'] = [(self._host, 'port_num')]
-            with self._connect() as conn:
-                pass
-
+        err_msg = 'Host must be a string: invalid value: .*'
         with self.assertRaisesRegexp(TypeError, err_msg):
             self._conn_info['backup_server_node'] = [(9999, self._port)]
             with self._connect() as conn:
@@ -202,6 +201,44 @@ class LoadBalanceTestCase(VerticaPythonIntegrationTestCase):
 
         with self.assertRaisesRegexp(TypeError, err_msg):
             self._conn_info['backup_server_node'] = [(9999, 'port_num')]
+            with self._connect() as conn:
+                pass
+
+        err_msg = 'Port must be an integer or a string: invalid value: .*'
+        with self.assertRaisesRegexp(TypeError, err_msg):
+            self._conn_info['backup_server_node'] = [(self._host, 5433.0022)]
+            with self._connect() as conn:
+                pass
+
+        err_msg = 'Port .* is not a valid string: invalid literal for int\(\) with base 10: .*'
+        with self.assertRaisesRegexp(ValueError, err_msg):
+            self._conn_info['backup_server_node'] = [(self._host, 'port_num')]
+            with self._connect() as conn:
+                pass
+
+        with self.assertRaisesRegexp(ValueError, err_msg):
+            self._conn_info['backup_server_node'] = [(self._host, '5433.0022')]
+            with self._connect() as conn:
+                pass
+
+        err_msg = 'Invalid port number: .*'
+        with self.assertRaisesRegexp(ValueError, err_msg):
+            self._conn_info['backup_server_node'] = [(self._host, -1000)]
+            with self._connect() as conn:
+                pass
+
+        with self.assertRaisesRegexp(ValueError, err_msg):
+            self._conn_info['backup_server_node'] = [(self._host, 66000)]
+            with self._connect() as conn:
+                pass
+
+        with self.assertRaisesRegexp(ValueError, err_msg):
+            self._conn_info['backup_server_node'] = [(self._host, '-1000')]
+            with self._connect() as conn:
+                pass
+
+        with self.assertRaisesRegexp(ValueError, err_msg):
+            self._conn_info['backup_server_node'] = [(self._host, '66000')]
             with self._connect() as conn:
                 pass
 

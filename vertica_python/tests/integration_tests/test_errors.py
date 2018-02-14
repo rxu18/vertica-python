@@ -40,12 +40,6 @@ from ... import errors
 
 
 class ErrorTestCase(VerticaPythonIntegrationTestCase):
-    def setUp(self):
-        super(ErrorTestCase, self).setUp()
-        with self._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("DROP TABLE IF EXISTS {0}".format(self.test_config['table']))
-
     def test_missing_schema(self):
         with self._connect() as conn:
             cur = conn.cursor()
@@ -61,6 +55,9 @@ class ErrorTestCase(VerticaPythonIntegrationTestCase):
     def test_duplicate_object(self):
         with self._connect() as conn:
             cur = conn.cursor()
-            cur.execute("CREATE TABLE {0} (a BOOLEAN)".format(self.test_config['table']))
+            cur.execute("DROP TABLE IF EXISTS duplicate_table")
+            query = "CREATE TABLE duplicate_table (a BOOLEAN)"
+            cur.execute(query)
             with self.assertRaises(errors.DuplicateObject):
-                cur.execute("CREATE TABLE {0} (a BOOLEAN)".format(self.test_config['table']))
+                cur.execute(query)
+            cur.execute("DROP TABLE IF EXISTS duplicate_table")

@@ -21,7 +21,7 @@ class ConnectionTestCase(VerticaPythonIntegrationTestCase):
         res = self._query_and_fetchone(query)
         self.assertEqual(res[0], value)
 
-        query = 'SELECT client_os_user_name FROM v_internal.dc_session_starts WHERE session_id = (SELECT current_session())'
+        query = 'SELECT client_os_user_name FROM v_internal.dc_session_starts WHERE session_id=(SELECT current_session())'
         res = self._query_and_fetchone(query)
         self.assertEqual(res[0], value)
 

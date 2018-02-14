@@ -23,7 +23,6 @@ default_configs = {
     'port': 5433,
     'user': getpass.getuser(),
     'password': '',
-    'table': 'vertica_python_unit_test',
 }
 
 class VerticaPythonTestCase(unittest.TestCase):

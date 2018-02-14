@@ -106,12 +106,29 @@ class _AddressList(object):
         self._logger.debug('Address list: {0}'.format(list(self.address_deque)))
 
     def _append(self, host, port):
-        if isinstance(host, string_types) and isinstance(port, integer_types):
-            self.address_deque.append((host, port, False))
-        else:
-            err_msg = 'Host {0} must be a string and port {1} must be an integer'.format(host, port)
+        if not isinstance(host, string_types):
+            err_msg = 'Host must be a string: invalid value: {0}'.format(host)
             self._logger.error(err_msg)
             raise TypeError(err_msg)
+
+        if not isinstance(port, (string_types, integer_types)):
+            err_msg = 'Port must be an integer or a string: invalid value: {0}'.format(port)
+            self._logger.error(err_msg)
+            raise TypeError(err_msg)
+        elif isinstance(port, string_types):
+            try:
+                port = int(port)
+            except ValueError as e:
+                err_msg = 'Port "{0}" is not a valid string: {1}'.format(port, e)
+                self._logger.error(err_msg)
+                raise ValueError(err_msg)
+
+        if port < 0 or port > 65535:
+            err_msg = 'Invalid port number: {0}'.format(port)
+            self._logger.error(err_msg)
+            raise ValueError(err_msg)
+
+        self.address_deque.append((host, port, False))
 
     def push(self, host, port):
         self.address_deque.appendleft((host, port, False))
@@ -136,7 +153,7 @@ class _AddressList(object):
                 try:
                     resolved_hosts = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
                 except Exception as e:
-                    self._logger.warning('Error resolving host {0} on port {1}: {2}'.format(host, port, e))
+                    self._logger.warning('Error resolving host "{0}" on port {1}: {2}'.format(host, port, e))
                     continue
 
                 # add resolved IP addresses to deque
@@ -309,11 +326,11 @@ class Connection(object):
             res = BackendMessage.from_type(type_=response, data=raw_socket.recv(size-4))
             host = res.get_host()
             port = res.get_port()
-            self._logger.info('Load balancing to host {0} on port {1}'.format(host, port))
+            self._logger.info('Load balancing to host "{0}" on port {1}'.format(host, port))
 
             socket_host, socket_port = raw_socket.getpeername()
             if host == socket_host and port == socket_port:
-                self._logger.info('Already connecting to host {0} on port {1}. Ignore load balancing.'.format(host, port))
+                self._logger.info('Already connecting to host "{0}" on port {1}. Ignore load balancing.'.format(host, port))
                 return raw_socket
 
             # Push the new host onto the address list before connecting again. Note that this
@@ -359,13 +376,13 @@ class Connection(object):
             last_exception = None
             host, port = addr
 
-            self._logger.info("Establishing connection to host {0} on port {1}".format(host, port))
+            self._logger.info('Establishing connection to host "{0}" on port {1}'.format(host, port))
             try:
                 raw_socket = self.create_socket()
                 raw_socket.connect((host, port))
                 break
             except Exception as e:
-                self._logger.info('Failed to connect to host {0} on port {1}: {2}'.format(host, port, e))
+                self._logger.info('Failed to connect to host "{0}" on port {1}: {2}'.format(host, port, e))
                 last_exception = e
                 self.address_list.pop()
                 addr = self.address_list.peek()
