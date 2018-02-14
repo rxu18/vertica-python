@@ -19,11 +19,8 @@ class VerticaPythonIntegrationTestCase(VerticaPythonTestCase):
     @classmethod
     def setUpClass(cls):
         config_list = ['log_dir', 'log_level', 'host', 'port',
-                       'user', 'password', 'database', 'table']
+                       'user', 'password', 'database']
         cls.test_config = cls._load_test_config(config_list)
-        
-        # TODO: delete this legacy variable
-        cls._table = cls.test_config['table']
 
         # Test logger
         logfile = cls._setup_logger('integration_tests', 
@@ -44,9 +41,7 @@ class VerticaPythonIntegrationTestCase(VerticaPythonTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        with cls._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("DROP TABLE IF EXISTS {0}".format(cls.test_config['table']))
+        pass
 
     @classmethod
     def _connect(cls):

@@ -11,6 +11,7 @@ from ... import errors
 class CursorTestCase(VerticaPythonIntegrationTestCase):
     def setUp(self):
         super(CursorTestCase, self).setUp()
+        self._table = 'cursor_test'
         self._init_table()
 
     def _init_table(self):
@@ -25,6 +26,12 @@ class CursorTestCase(VerticaPythonIntegrationTestCase):
                                 b VARCHAR(32)
                            )
                         """.format(self._table))
+
+    def tearDown(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("DROP TABLE IF EXISTS {0}".format(self._table))
+        super(CursorTestCase, self).tearDown()
 
     def test_inline_commit(self):
         with self._connect() as conn:
@@ -353,9 +360,10 @@ class CursorTestCase(VerticaPythonIntegrationTestCase):
             self.assertListOfListsEqual(res, [])
 
 
-class TestExecutemany(VerticaPythonIntegrationTestCase):
+class ExecutemanyTestCase(VerticaPythonIntegrationTestCase):
     def setUp(self):
-        super(TestExecutemany, self).setUp()
+        super(ExecutemanyTestCase, self).setUp()
+        self._table = 'executemany_test'
         self._init_table()
 
     def _init_table(self):
@@ -370,6 +378,12 @@ class TestExecutemany(VerticaPythonIntegrationTestCase):
                                 b VARCHAR(32)
                            )
                         """.format(self._table))
+
+    def tearDown(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("DROP TABLE IF EXISTS {0}".format(self._table))
+        super(ExecutemanyTestCase, self).tearDown()
 
     def _test_executemany(self, table, seq_of_values):
         with self._connect() as conn:
