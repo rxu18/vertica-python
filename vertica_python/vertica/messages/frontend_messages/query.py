@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +32,15 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
+
+"""
+Query message
+
+In the simple query protocol, the frontend sends a Query message, which contains
+an SQL command (or commands) expressed as a text string. The backend then sends
+one or more response messages depending on the contents of the query command
+string, and finally a ReadyForQuery message.
+"""
 
 from __future__ import print_function, division, absolute_import
 

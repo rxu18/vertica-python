@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,6 +48,9 @@ class BackendKeyData(BackendMessage):
         unpacked = unpack('!2I', data)
         self.pid = unpacked[0]
         self.key = unpacked[1]
+
+    def __str__(self):
+        return "BackendKeyData: pid = {}, key = {}".format(self.pid, self.key)
 
 
 BackendMessage.register(BackendKeyData)

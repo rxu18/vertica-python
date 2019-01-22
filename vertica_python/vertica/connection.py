@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,6 +50,7 @@ from collections import deque
 from builtins import str
 from six import raise_from, string_types, integer_types
 
+import vertica_python
 from .. import errors
 from ..vertica import messages
 from ..vertica.cursor import Cursor
@@ -164,6 +166,14 @@ class _AddressList(object):
         return None
 
 
+def _generate_session_label():
+    return '{type}-{version}-{id}'.format(
+        type='vertica-python',
+        version=vertica_python.__version__,
+        id=uuid.uuid1()
+    )
+
+
 class Connection(object):
     def __init__(self, options=None):
         self.parameters = {}
@@ -182,6 +192,7 @@ class Connection(object):
         self.options.setdefault('database', self.options['user'])
         self.options.setdefault('password', DEFAULT_PASSWORD)
         self.options.setdefault('read_timeout', DEFAULT_READ_TIMEOUT)
+        self.options.setdefault('session_label', _generate_session_label())
 
         # Set up connection logger
         logger_name = 'vertica_{0}_{1}'.format(id(self), str(uuid.uuid4())) # must be a unique value
@@ -204,7 +215,7 @@ class Connection(object):
         self._cursor = Cursor(self, self._logger, cursor_type=None,
                               unicode_error=self.options['unicode_error'])
 
-        self._logger.info('Connecting as user "{0}" to database "{1}" on host "{2}" with port {3}'.format(
+        self._logger.info('Connecting as user "{}" to database "{}" on host "{}" with port {}'.format(
                      self.options['user'], self.options['database'],
                      self.options['host'], self.options['port']))
         self.startup_connection()
@@ -441,32 +452,48 @@ class Connection(object):
         self.close()
         self.startup_connection()
 
-    def read_message(self):
-        try:
-            type_ = self.read_bytes(1)
-            size = unpack('!I', self.read_bytes(4))[0]
+    def is_asynchronous_message(self, message):
+        # Check if it is an asynchronous response message
+        # Note: ErrorResponse is a subclass of NoticeResponse
+        return (isinstance(message, messages.ParameterStatus) or
+            (isinstance(message, messages.NoticeResponse) and
+             not isinstance(message, messages.ErrorResponse)))
 
-            if size < 4:
-                raise errors.MessageError("Bad message size: {0}".format(size))
-            message = BackendMessage.from_type(type_, self.read_bytes(size - 4))
-            self._logger.debug('<= %s', message)
-            return message
-        except (SystemError, IOError) as e:
-            self.close_socket()
-            # noinspection PyTypeChecker
-            raise_from(errors.ConnectionError, e)
+    def handle_asynchronous_message(self, message):
+        if isinstance(message, messages.ParameterStatus):
+            self.parameters[message.name] = message.value
+        elif (isinstance(message, messages.NoticeResponse) and
+             not isinstance(message, messages.ErrorResponse)):
+            if getattr(self, 'notice_handler', None) is not None:
+                self.notice_handler(message)
+            else:
+                self._logger.warning(message.error_message())
+
+    def read_message(self):
+        while True:
+            try:
+                type_ = self.read_bytes(1)
+                size = unpack('!I', self.read_bytes(4))[0]
+                if size < 4:
+                    raise errors.MessageError("Bad message size: {0}".format(size))
+                message = BackendMessage.from_type(type_, self.read_bytes(size - 4))
+                self._logger.debug('<= %s', message)
+                self.handle_asynchronous_message(message)
+            except (SystemError, IOError) as e:
+                self.close_socket()
+                # noinspection PyTypeChecker
+                self._logger.error(e)
+                raise_from(errors.ConnectionError, e)
+            if not self.is_asynchronous_message(message):
+                break
+        return message
 
     def process_message(self, message):
         if isinstance(message, messages.ErrorResponse):
             raise errors.ConnectionError(message.error_message())
-        elif isinstance(message, messages.NoticeResponse):
-            if getattr(self, 'notice_handler', None) is not None:
-                self.notice_handler(message)
         elif isinstance(message, messages.BackendKeyData):
             self.backend_pid = message.pid
             self.backend_key = message.key
-        elif isinstance(message, messages.ParameterStatus):
-            self.parameters[message.name] = message.value
         elif isinstance(message, messages.ReadyForQuery):
             self.transaction_status = message.transaction_status
         elif isinstance(message, messages.CommandComplete):
@@ -508,8 +535,9 @@ class Connection(object):
         user = self.options['user'].encode(ASCII)
         database = self.options['database'].encode(ASCII)
         password = self.options['password'].encode(ASCII)
+        session_label = self.options['session_label'].encode(ASCII)
 
-        self.write(messages.Startup(user, database))
+        self.write(messages.Startup(user, database, session_label))
 
         while True:
             message = self.read_message()

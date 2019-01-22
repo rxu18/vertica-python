@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +47,9 @@ from builtins import str
 from dateutil import parser
 
 from .. import errors
+from .. import datatypes
 from ..compat import as_str, as_text
+
 
 YEARS_RE = re.compile(r"^([0-9]+)-")
 
@@ -127,21 +130,32 @@ def date_parse(s):
     return date(*map(lambda x: min(int(x), 9999), s.split('-')))
 
 
+def time_parse(s):
+    s = as_str(s)
+    if len(s) == 8:
+        return datetime.strptime(s, '%H:%M:%S').time()
+    return datetime.strptime(s, '%H:%M:%S.%f').time()
+
+
 ColumnTuple = namedtuple('Column', ['name', 'type_code', 'display_size', 'internal_size',
                                     'precision', 'scale', 'null_ok'])
 
 
 class Column(object):
     def __init__(self, col, unicode_error=None):
-        self.name = col['name'].decode()
+        self.name = col['name'].decode(UTF_8)
         self.type_code = col['data_type_oid']
-        self.display_size = None
+        self.display_size = datatypes.getDisplaySize(col['data_type_oid'], col['type_modifier'])
         self.internal_size = col['data_type_size']
-        self.precision = None
-        self.scale = None
-        self.null_ok = None
+        self.precision = datatypes.getPrecision(col['data_type_oid'], col['type_modifier'])
+        self.scale = datatypes.getScale(col['data_type_oid'], col['type_modifier'])
+        self.null_ok = col['null_ok']
+        self.is_identity = col['is_identity']
         self.unicode_error = unicode_error
         self.data_type_conversions = Column._data_type_conversions(unicode_error=self.unicode_error)
+
+        self.props = ColumnTuple(self.name, self.type_code, self.display_size, self.internal_size,
+                                 self.precision, self.scale, self.null_ok)
 
         # WORKAROUND: Treat LONGVARCHAR as VARCHAR
         if self.type_code == 115:
@@ -150,11 +164,6 @@ class Column(object):
         # Mark type_code as unspecified if not within known data types
         if self.type_code >= len(self.data_type_conversions):
             self.type_code = 0
-
-        # self.props = ColumnTuple(col['name'], col['data_type_oid'], None, col['data_type_size'],
-        #                          None, None, None)
-        self.props = ColumnTuple(self.name, self.type_code, None, col['data_type_size'], None, None,
-                                 None)
 
         # self.converter = self.data_type_conversions[col['data_type_oid']][1]
         self.converter = self.data_type_conversions[self.type_code][1]
@@ -184,7 +193,7 @@ class Column(object):
             ('char', lambda s: str(s, encoding=UTF_8, errors=unicode_error)),
             ('varchar', lambda s: str(s, encoding=UTF_8, errors=unicode_error)),
             ('date', date_parse),
-            ('time', None),
+            ('time', time_parse),
             ('timestamp', timestamp_parse),
             ('timestamp_tz', timestamp_tz_parse),
             ('interval', None),

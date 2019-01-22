@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,5 +56,5 @@ from .sync import Sync
 from .terminate import Terminate
 
 __all__ = ['Bind', 'Query', 'CancelRequest', 'Close', 'CopyData', 'CopyDone', 'CopyFail',
-           'CopyStream', 'Describe', 'Execute', 'Flush', 'LoadBalanceRequest', 'Parse', 'Password',
-           'SslRequest', 'Startup', 'Sync', 'Terminate']
+           'CopyStream', 'Describe', 'Execute', 'Flush', 'LoadBalanceRequest', 'Parse',
+           'Password', 'SslRequest', 'Startup', 'Sync', 'Terminate']

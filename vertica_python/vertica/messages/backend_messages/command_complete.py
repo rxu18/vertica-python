@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +33,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+"""
+CommandComplete message
+
+The server prompt that indicates a command has completed. The command tag
+string is the name of the command that was run.
+"""
+
 from __future__ import print_function, division, absolute_import
 
 import re
@@ -40,6 +48,7 @@ from struct import unpack
 
 from ..message import BackendMessage
 
+UTF_8 = 'utf-8'
 
 class CommandComplete(BackendMessage):
     message_id = b'C'
@@ -47,21 +56,9 @@ class CommandComplete(BackendMessage):
     def __init__(self, data):
         BackendMessage.__init__(self)
         data = unpack('{0}sx'.format(len(data) - 1), data)[0]
+        self.command_tag = data.decode(UTF_8)
 
-        if re.match(b"INSERT", data) is not None:
-            splitstr = data.split(b' ', 3)
-            self.tag = splitstr[0]
-            if len(splitstr) >= 2:
-                self.oid = int(splitstr[1])
-            if len(splitstr) >= 3:
-                self.rows = int(splitstr[2])
-        elif re.match(b"(DELETE|UPDATE|MOVE|FETCH|COPY)", data) is not None:
-            splitstr = data.split(b' ', 2)
-            self.tag = splitstr[0]
-            if len(splitstr) >= 2:
-                self.rows = int(splitstr[1])
-        else:
-            self.tag = data
-
+    def __str__(self):
+        return 'CommandComplete: command_tag = "{}"'.format(self.command_tag)
 
 BackendMessage.register(CommandComplete)

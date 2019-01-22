@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +36,7 @@
 
 from __future__ import print_function, division, absolute_import
 
+import datetime
 import re
 
 try:
@@ -324,6 +326,7 @@ class Cursor(object):
         while True:
             message = self.connection.read_message()
 
+            self._message = message
             if isinstance(message, messages.ErrorResponse):
                 raise errors.QueryError.from_error_response(message, sql)
 
@@ -376,8 +379,10 @@ class Cursor(object):
 
                 if isinstance(param, string_types):
                     param = self.format_quote(as_text(param), is_csv)
+                elif isinstance(param, (datetime.datetime, datetime.date, datetime.time)):
+                    param = self.format_quote(as_text(str(param)), is_csv)
                 elif param is None:
-                    param = NULL
+                    param = '' if is_csv else NULL
                 else:
                     param = str(param)
                 value = as_text(param)
@@ -392,8 +397,10 @@ class Cursor(object):
             for param in parameters:
                 if isinstance(param, string_types):
                     param = self.format_quote(as_text(param), is_csv)
+                elif isinstance(param, (datetime.datetime, datetime.date, datetime.time)):
+                    param = self.format_quote(as_text(str(param)), is_csv)
                 elif param is None:
-                    param = NULL
+                    param = '' if is_csv else NULL
                 else:
                     param = str(param)
                 value = as_text(param)
@@ -409,6 +416,6 @@ class Cursor(object):
     def format_quote(self, param, is_csv):
         # TODO Make sure adapt() behaves properly
         if is_csv:
-            return '"{0}"'.format(re.escape(param))
+            return u'"{0}"'.format(re.escape(param))
         else:
             return QuotedString(param.encode(UTF_8, self.unicode_error)).getquoted()

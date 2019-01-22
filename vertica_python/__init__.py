@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,8 +47,8 @@ from .errors import (
 
 # Main module for this library.
 __author__ = 'Uber Technologies, Inc'
-__copyright__ = 'Copyright 2013, Uber Technologies, Inc.'
-__license__ = 'MIT'
+__copyright__ = 'Copyright (c) 2018 Micro Focus or one of its affiliates.'
+__license__ = 'Apache 2.0'
 
 __all__ = ['Connection', 'PROTOCOL_VERSION', 'version_info', 'apilevel', 'threadsafety',
            'paramstyle', 'connect', 'Error', 'Warning', 'DataError', 'DatabaseError',
@@ -55,11 +56,11 @@ __all__ = ['Connection', 'PROTOCOL_VERSION', 'version_info', 'apilevel', 'thread
            'OperationalError', 'ProgrammingError']
 
 # The version number of this library.
-version_info = (0, 7, 3)
+version_info = (0, 8, 2)
 __version__ = '.'.join(map(str, version_info))
 
-# The protocol version (3.0.0) implemented in this library.
-PROTOCOL_VERSION = 3 << 16
+# The protocol version (3.4) implemented in this library.
+PROTOCOL_VERSION = 3 << 16 | 4
 
 apilevel = 2.0
 threadsafety = 1  # Threads may share the module, but not connections!

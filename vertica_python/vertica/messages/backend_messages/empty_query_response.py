@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,9 +41,8 @@ from ..message import BackendMessage
 class EmptyQueryResponse(BackendMessage):
     message_id = b'I'
 
-    def __init__(self, data=None):
+    def __init__(self, data):
         BackendMessage.__init__(self)
-        self.data = data
 
 
 BackendMessage.register(EmptyQueryResponse)

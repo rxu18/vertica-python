@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -181,6 +182,10 @@ class ConnectionFailure(QueryError):
     pass
 
 
+class LostConnectivityFailure(QueryError):
+    pass
+
+
 QUERY_ERROR_CLASSES = {
     b'55V03': LockFailure,
     b'53000': InsufficientResources,
@@ -194,5 +199,6 @@ QUERY_ERROR_CLASSES = {
     b'22007': InvalidDatetimeFormat,
     b'42710': DuplicateObject,
     b'57014': QueryCanceled,
-    b'08006': ConnectionFailure
+    b'08006': ConnectionFailure,
+    b'V1001': LostConnectivityFailure
 }

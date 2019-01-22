@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +33,22 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+"""
+Vertica Frontend/Backend Protocol
+
+All communication between frontend (client) and backend (server) is through a
+stream of messages.
+
+Message Format: The first byte of a message identifies the message type, and
+the next four bytes specify the length of the rest of the message (this length
+count includes itself, but not the message-type byte). The remaining contents
+of the message are determined by the message type. An exception is the Startup
+message sent by frontend, which has no message-type byte.
+
+All data in Vertica is represented as UTF-8, so the frontend has to convert data
+going to the backend from Python text string into UTF-8, and to convert data
+coming from the backend from UTF-8 into Python text string.
+"""
 
 from __future__ import print_function, division, absolute_import
 
@@ -68,6 +85,9 @@ class Message(object):
             msg_with_size = message_size + msg
 
         return msg_with_size
+
+    def __str__(self):
+        return self.__class__.__name__
 
 
 # noinspection PyAbstractClass

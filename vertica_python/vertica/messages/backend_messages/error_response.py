@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,6 +41,9 @@ from vertica_python.vertica.messages.backend_messages.notice_response import Not
 
 class ErrorResponse(NoticeResponse, BackendMessage):
     message_id = b'E'
+
+    def __str__(self):
+        return "ErrorResponse: {}".format(self.error_message())
 
 
 BackendMessage.register(ErrorResponse)

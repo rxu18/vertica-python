@@ -1,3 +1,4 @@
+# Copyright (c) 2018 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,8 +35,10 @@
 
 from __future__ import print_function, division, absolute_import
 
+import datetime
 import logging
 import os as _os
+import re
 import tempfile
 
 from .base import VerticaPythonIntegrationTestCase
@@ -173,6 +176,15 @@ class CursorTestCase(VerticaPythonIntegrationTestCase):
             res = cur.fetchall()
             self.assertListOfListsEqual(res, [[5, 'ff']])
 
+    def test_copy_null(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.copy("COPY {0} (a, b) FROM STDIN DELIMITER ','".format(self._table),
+                     "1,\n,foo")
+            cur.execute("SELECT a, b FROM {0} ORDER BY a ASC".format(self._table))
+            res = cur.fetchall()
+            self.assertListOfListsEqual(res, [[None, 'foo'], [1, None]])
+
     def test_copy_with_string(self):
         with self._connect() as conn1, self._connect() as conn2:
             cur1 = conn1.cursor()
@@ -190,7 +202,12 @@ class CursorTestCase(VerticaPythonIntegrationTestCase):
             self.assertListOfListsEqual(res_from_cur2, [[2, 'bar']])
 
     def test_copy_with_file(self):
-        with tempfile.TemporaryFile() as f, self._connect() as conn1, self._connect() as conn2:
+        with tempfile.TemporaryFile() as tmpfile, self._connect() as conn1, self._connect() as conn2:
+            if _os.name != 'posix' or _os.sys.platform == 'cygwin':
+                f = getattr(tmpfile, 'file')
+            else:
+                f = tmpfile
+
             f.write(b"1,foo\n2,bar")
             # move rw pointer to top of file
             f.seek(0)
@@ -223,6 +240,43 @@ class CursorTestCase(VerticaPythonIntegrationTestCase):
 
             cur.execute("SELECT 1;")
             res = cur.fetchall()
+            self.assertListOfListsEqual(res, [[1]])
+
+    # unit test for #213
+    def test_cmd_after_invalid_copy_stmt(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+
+            cur.execute("SELECT 1;")
+            res = cur.fetchall()
+            self.assertListOfListsEqual(res, [[1]])
+
+            res = [[]]
+            try:
+                cur.copy("COPY non_existing_tab(a, b) FROM STDIN DELIMITER ','", "FAIL")
+            except errors.Error as e:
+                cur.execute("SELECT 1;")
+                res = cur.fetchall()
+
+            self.assertListOfListsEqual(res, [[1]])
+
+    # unit test for #213
+    def test_cmd_after_rejected_copy_data(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+
+            cur.execute("SELECT 1;")
+            res = cur.fetchall()
+            self.assertListOfListsEqual(res, [[1]])
+
+            res = [[]]
+            try:
+                cur.copy("COPY {0} (a, b) FROM STDIN DELIMITER ',' ABORT ON ERROR".format(self._table),
+                         "FAIL")
+            except errors.Error as e:
+                cur.execute("SELECT 1;")
+                res = cur.fetchall()
+
             self.assertListOfListsEqual(res, [[1]])
 
     def test_with_conn(self):
@@ -388,6 +442,46 @@ class CursorTestCase(VerticaPythonIntegrationTestCase):
             res = cur.fetchall()
             self.assertListOfListsEqual(res, [])
 
+    def test_format_quote_unicode(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            bad_word = u'Fr\xfchst\xfcck'
+            formatted_word = u''.join((u'"', re.escape(bad_word), u'"'))
+            self.assertEqual(formatted_word, cur.format_quote(bad_word, True))
+            
+    # unit test for #175
+    def test_datetime_types(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+
+            # clean old table
+            cur.execute("DROP TABLE IF EXISTS {0}".format(self._table))
+
+            # create test table
+            cur.execute("""CREATE TABLE {0} (
+                                a INT,
+                                b VARCHAR(32),
+                                c TIMESTAMP,
+                                d DATE,
+                                e TIME
+                           )
+                        """.format(self._table))
+
+            cur.execute("INSERT INTO {0} (a, b, c, d, e) VALUES (:n, :s, :dt, :d, :t)".format(self._table),
+                            {'n': 10, 's': 'aa',
+                             'dt': datetime.datetime(2018, 9, 7, 15, 38, 19, 769000),
+                             'd': datetime.date(2018, 9, 7),
+                             't': datetime.time(13, 50, 9)})
+            conn.commit()
+
+            cur.execute("SELECT a, b, c, d, e FROM {0}".format(self._table))
+            res = cur.fetchall()
+            self.assertListOfListsEqual(res, [[10, 'aa', datetime.datetime(2018, 9, 7, 15, 38, 19, 769000),
+                                               datetime.date(2018, 9, 7), datetime.time(13, 50, 9)]])
+
+            # clean up
+            cur.execute("DROP TABLE IF EXISTS {0}".format(self._table))
+
 
 class ExecutemanyTestCase(VerticaPythonIntegrationTestCase):
     def setUp(self):
@@ -436,3 +530,25 @@ class ExecutemanyTestCase(VerticaPythonIntegrationTestCase):
     def test_executemany_quoted_path(self):
         table = '.'.join(['"{}"'.format(s.strip('"')) for s in self._table.split('.')])
         self._test_executemany(table, [(1, 'aa'), (2, 'bb')])
+
+    def test_executemany_utf8(self):
+        self._test_executemany(self._table, [(1, u'a\xfc'), (2, u'bb')])
+
+    def test_executemany_null(self):
+        seq_of_values_1 = ((None, 'foo'), [2, None])
+        seq_of_values_2 = ({'a': None, 'b': 'bar'}, {'a': 4, 'b': None})
+        seq_of_values_to_compare = [[None, 'bar'], [None, 'foo'], [2, None], [4, None]]
+        with self._connect() as conn:
+            cur = conn.cursor()
+
+            cur.executemany("INSERT INTO {0} (a, b) VALUES (%s, %s)".format(self._table),
+                            seq_of_values_1)
+            conn.commit()
+            cur.executemany("INSERT INTO {0} (a, b) VALUES (:a, :b)".format(self._table),
+                            seq_of_values_2)
+            conn.commit()
+
+            cur.execute("SELECT * FROM {0} ORDER BY a ASC, b ASC".format(self._table))
+            res = cur.fetchall()
+            self.assertListOfListsEqual(res, seq_of_values_to_compare)
+            self.assertIsNone(cur.fetchone())
