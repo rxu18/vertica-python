@@ -3,23 +3,17 @@
 [![PyPI version](https://badge.fury.io/py/vertica-python.svg)](https://badge.fury.io/py/vertica-python)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python Version](https://img.shields.io/pypi/pyversions/vertica-python.svg)](https://www.python.org/downloads/)
-
-:loudspeaker: 08/14/2018: *vertica-python* becomes Vertica’s first officially supported open source database client, see the blog [here](https://my.vertica.com/blog/vertica-python-becomes-verticas-first-officially-supported-open-source-database-client/).
-
-0.6.x adds python3 support (unicode namedparams support is currently broken in python3, see issue 112)
-
-0.5.x changes the connection method to accept kwargs instead of a dict to be more dbapi compliant.
-      copy methods improved and consolidated in 0.5.1
-
-0.4.x breaks some of the older query interfaces (row_handler callback, and connection.query).
-It replaces the row_handler callback with an iterate() method. Please see examples below
-If you are on 0.4.x, please upgrade to 0.4.6 as there are various bug fixes
+[![Downloads](https://pepy.tech/badge/vertica-python/week)](https://pepy.tech/project/vertica-python)
 
 vertica-python is a native Python adapter for the Vertica (http://www.vertica.com) database.
 
-vertica-python is currently in beta stage; it has been tested for functionality and has a very basic test suite. Please use with caution, and feel free to submit issues and/or pull requests (after running the unit tests).
+:loudspeaker: 08/14/2018: *vertica-python* becomes Vertica’s first officially supported open source database client, see the blog [here](https://my.vertica.com/blog/vertica-python-becomes-verticas-first-officially-supported-open-source-database-client/).
 
-vertica-python has been tested with Vertica 6.1.2/7.0.0+ and Python 2.7/3.4.
+Please check out [release notes](https://github.com/vertica/vertica-python/releases) to learn about the latest improvements.
+
+vertica-python is currently in beta stage; it has been tested for functionality and has a very basic test suite. Please use with caution, and feel free to submit issues and/or pull requests (Read up on our [contributing guidelines](#contributing-guidelines)).
+
+vertica-python has been tested with Vertica 9.1.1 and Python 2.7/3.4/3.5/3.6.
 
 
 ## Installation
@@ -67,6 +61,8 @@ conn_info = {'host': '127.0.0.1',
              'unicode_error': 'strict',
              # SSL is disabled by default
              'ssl': False,
+             # using server-side prepared statements is disabled by default
+             'use_prepared_statements': False,
              # connection timeout is not enabled by default
              'connection_timeout': 5}
 
@@ -232,12 +228,86 @@ cur.fetchall()
 # [ [1, 'something'], [2, 'something_else'] ]
 ```
 
+**Query using server-side prepared statements**:
+
+Vertica server-side prepared statements let you define a statement once and then run it many times with different parameters. Placeholders in the statement are represented by question marks (?). Server-side prepared statements are useful for preventing SQL injection attacks.
+
+```python
+import vertica_python
+
+# Enable using server-side prepared statements at connection level
+conn_info = {'host': '127.0.0.1',
+             'user': 'some_user',
+             'password': 'some_password',
+             'database': 'a_database',
+             'use_prepared_statements': True,
+             }
+
+with vertica_python.connect(**conn_info) as connection:
+    cur = connection.cursor()
+    cur.execute("CREATE TABLE tbl (a INT, b VARCHAR)")
+    cur.execute("INSERT INTO tbl VALUES (?, ?)", [1, 'aa'])
+    cur.execute("INSERT INTO tbl VALUES (?, ?)", [2, 'bb'])
+    cur.executemany("INSERT INTO tbl VALUES (?, ?)", [(3, 'foo'), (4, 'xx'), (5, 'bar')])
+    cur.execute("COMMIT")
+
+    cur.execute("SELECT * FROM tbl WHERE a>=? AND a<=? ORDER BY a", (2,4))
+    cur.fetchall()
+    # [[2, 'bb'], [3, 'foo'], [4, 'xx']]
+```
+
+Vertica does not support executing a command string containing multiple statements using server-side prepared statements. You can set ```use_prepared_statements``` option in ```cursor.execute*()``` functions to override the connection level setting.
+
+```python
+import vertica_python
+
+# Enable using server-side prepared statements at connection level
+conn_info = {'host': '127.0.0.1',
+             'user': 'some_user',
+             'password': 'some_password',
+             'database': 'a_database',
+             'use_prepared_statements': True,
+             }
+
+with vertica_python.connect(**conn_info) as connection:
+    cur = connection.cursor()
+    cur.execute("CREATE TABLE tbl (a INT, b VARCHAR)")
+
+    # Executing compound statements
+    cur.execute("INSERT INTO tbl VALUES (?, ?); COMMIT", [1, 'aa'])
+    # Error message: Cannot insert multiple commands into a prepared statement
+
+    # Disable prepared statements but forget to change placeholders (?)
+    cur.execute("INSERT INTO tbl VALUES (?, ?); COMMIT;", [1, 'aa'], use_prepared_statements=False)
+    # TypeError: not all arguments converted during string formatting
+
+    cur.execute("INSERT INTO tbl VALUES (%s, %s); COMMIT;", [1, 'aa'], use_prepared_statements=False)
+    cur.execute("INSERT INTO tbl VALUES (:a, :b); COMMIT;", {'a': 2, 'b': 'bb'}, use_prepared_statements=False)
+
+# Disable using server-side prepared statements at connection level
+conn_info['use_prepared_statements'] = False
+with vertica_python.connect(**conn_info) as connection:
+    cur = connection.cursor()
+
+    # Try using prepared statements
+    cur.execute("INSERT INTO tbl VALUES (?, ?)", [3, 'foo'])
+    # TypeError: not all arguments converted during string formatting
+
+    cur.execute("INSERT INTO tbl VALUES (?, ?)", [3, 'foo'], use_prepared_statements=True)
+
+    # Query using named parameters
+    cur.execute("SELECT * FROM tbl WHERE a>=:n1 AND a<=:n2 ORDER BY a", {'n1': 2, 'n2': 4})
+    cur.fetchall()
+    # [[2, 'bb'], [3, 'foo']]
+```
+Note: In other drivers, the batch insert is converted into a COPY statement by using prepared statements. vertica-python currently does not support that.
+
 **Insert and commits** :
 
 ```python
 cur = connection.cursor()
 
-# inline commit
+# inline commit (when 'use_prepared_statements' is False)
 cur.execute("INSERT INTO a_table (a, b) VALUES (1, 'aa'); commit;")
 
 # commit in execution

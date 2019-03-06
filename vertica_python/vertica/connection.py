@@ -215,6 +215,11 @@ class Connection(object):
         self._cursor = Cursor(self, self._logger, cursor_type=None,
                               unicode_error=self.options['unicode_error'])
 
+        # knob for using server-side prepared statements
+        self.options.setdefault('use_prepared_statements', False)
+        self._logger.debug('Connection prepared statements is {}'.format(
+                     'enabled' if self.options['use_prepared_statements'] else 'disabled'))
+
         self._logger.info('Connecting as user "{}" to database "{}" on host "{}" with port {}'.format(
                      self.options['user'], self.options['database'],
                      self.options['host'], self.options['port']))
@@ -325,6 +330,7 @@ class Connection(object):
 
     def balance_load(self, raw_socket):
         # Send load balance request and read server response
+        self._logger.debug('=> %s', messages.LoadBalanceRequest())
         raw_socket.sendall(messages.LoadBalanceRequest().get_message())
         response = raw_socket.recv(1)
 
@@ -335,6 +341,7 @@ class Connection(object):
                 self._logger.error(err_msg)
                 raise errors.MessageError(err_msg)
             res = BackendMessage.from_type(type_=response, data=raw_socket.recv(size-4))
+            self._logger.debug('<= %s', res)
             host = res.get_host()
             port = res.get_port()
             self._logger.info('Load balancing to host "{0}" on port {1}'.format(host, port))
@@ -350,6 +357,7 @@ class Connection(object):
             raw_socket.close()
             raw_socket = self.establish_connection()
         else:
+            self._logger.debug('<= LoadBalanceResponse: %s', response)
             self._logger.warning("Load balancing requested but not supported by server")
 
         return raw_socket
@@ -357,8 +365,10 @@ class Connection(object):
     def enable_ssl(self, raw_socket, ssl_options):
         from ssl import CertificateError, SSLError
         # Send SSL request and read server response
+        self._logger.debug('=> %s', messages.SslRequest())
         raw_socket.sendall(messages.SslRequest().get_message())
         response = raw_socket.recv(1)
+        self._logger.debug('<= SslResponse: %s', response)
         if response in ('S', b'S'):
             self._logger.info('Enabling SSL')
             try:
@@ -422,8 +432,8 @@ class Connection(object):
         if not isinstance(message, FrontendMessage):
             raise TypeError("invalid message: ({0})".format(message))
 
-        self._logger.debug('=> %s', message)
         sock = self._socket()
+        self._logger.debug('=> %s', message)
         try:
             for data in message.fetch_message():
                 try:
@@ -487,6 +497,26 @@ class Connection(object):
             if not self.is_asynchronous_message(message):
                 break
         return message
+
+    def read_expected_message(self, expected_types, error_handler=None):
+        # Reads a message and does some basic error handling.
+        # expected_types must be a class (e.g. messages.BindComplete) or a tuple of classes
+        message = self.read_message()
+        if isinstance(message, expected_types):
+            return message
+        elif isinstance(message, messages.ErrorResponse):
+            if error_handler is not None:
+                error_handler(message)
+            else:
+                raise errors.DatabaseError(message.error_message())
+        else:
+            msg = 'Received unexpected message type: {}. '.format(type(message).__name__)
+            if isinstance(expected_types, tuple):
+                msg += 'Expected types: {}'.format(", ".join([t.__name__ for t in expected_types]))
+            else:
+                msg += 'Expected type: {}'.format(expected_types.__name__)
+            self._logger.error(msg)
+            raise errors.MessageError(msg)
 
     def process_message(self, message):
         if isinstance(message, messages.ErrorResponse):
