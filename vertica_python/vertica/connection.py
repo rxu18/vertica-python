@@ -1,4 +1,4 @@
-# Copyright (c) 2018 Micro Focus or one of its affiliates.
+# Copyright (c) 2018-2019 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,9 +39,7 @@ from __future__ import print_function, division, absolute_import
 import logging
 import socket
 import ssl
-import os
 import getpass
-import errno
 import uuid
 from struct import unpack
 from collections import deque
@@ -62,7 +60,6 @@ DEFAULT_HOST = 'localhost'
 DEFAULT_USER = getpass.getuser()
 DEFAULT_PORT = 5433
 DEFAULT_PASSWORD = ''
-DEFAULT_READ_TIMEOUT = 600
 DEFAULT_LOG_LEVEL = logging.WARNING
 DEFAULT_LOG_PATH = 'vertica_python.log'
 ASCII = 'ascii'
@@ -104,7 +101,7 @@ class _AddressList(object):
                            ' must be a host string or a (host, port) tuple')
                 self._logger.error(err_msg)
                 raise TypeError(err_msg)
-        
+
         self._logger.debug('Address list: {0}'.format(list(self.address_deque)))
 
     def _append(self, host, port):
@@ -191,13 +188,12 @@ class Connection(object):
         self.options.setdefault('user', DEFAULT_USER)
         self.options.setdefault('database', self.options['user'])
         self.options.setdefault('password', DEFAULT_PASSWORD)
-        self.options.setdefault('read_timeout', DEFAULT_READ_TIMEOUT)
         self.options.setdefault('session_label', _generate_session_label())
 
         # Set up connection logger
         logger_name = 'vertica_{0}_{1}'.format(id(self), str(uuid.uuid4())) # must be a unique value
         self._logger = logging.getLogger(logger_name)
-        
+
         if 'log_level' not in self.options and 'log_path' not in self.options:
             # logger is disabled by default
             self._logger.disabled = True
@@ -246,6 +242,7 @@ class Connection(object):
     # dbapi methods
     #############################################
     def close(self):
+        self._logger.info('Close the connection')
         try:
             self.write(messages.Terminate())
         finally:
@@ -571,14 +568,15 @@ class Connection(object):
             if isinstance(message, messages.Authentication):
                 # Password message isn't right format ("incomplete message from client")
                 if message.code == messages.Authentication.OK:
-                    self._logger.info("User {} successfully authenticated".format(user))
+                    self._logger.info("User {} successfully authenticated"
+                        .format(self.options['user']))
                 elif message.code == messages.Authentication.CHANGE_PASSWORD:
-                    msg = "The password for user {} has expired".format(user)
+                    msg = "The password for user {} has expired".format(self.options['user'])
                     self._logger.error(msg)
                     raise errors.ConnectionError(msg)
                 elif message.code == messages.Authentication.PASSWORD_GRACE:
                     self._logger.warning('The password for user {} will expire soon.'
-                        ' Please consider changing it.'.format(user))
+                        ' Please consider changing it.'.format(self.options['user']))
                 else:
                     self.write(messages.Password(password, message.code,
                                                  {'user': user,

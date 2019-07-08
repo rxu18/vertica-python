@@ -10,7 +10,7 @@ This document will guide you through the contribution process. There are a numbe
 
 If you find a bug, submit an [issue](https://github.com/vertica/vertica-python/issues) with a complete and reproducible bug report. If the issue can't be reproduced, it will be closed. If you opened an issue, but figured out the answer later on your own, comment on the issue to let people know, then close the issue.
 
-For issues (e.g. security related issues) that are **not suitable** to be reported publicly on the GitHub issue system, report your issues to [Vertica team](mailto:vertica-python-client@groups.ext.hpe.com) directly or file a case with Vertica support if you have a support account.
+For issues (e.g. security related issues) that are **not suitable** to be reported publicly on the GitHub issue system, report your issues to [Vertica open source team](mailto:vertica-opensrc@microfocus.com) directly or file a case with Vertica support if you have a support account.
 
 # Feature Requests
 
@@ -62,7 +62,7 @@ git checkout -b my-fix-branch
 
 We appreciate any and all [contributions to the test suite](#tests)! These tests use a Python module: [nosetests](https://nose.readthedocs.io). You might want to check out the Python documentation for more details.
 
-There are two types of tests: unit tests and integration tests. Unit tests do simple unit testing of individual classes and functions, which do not require database connection. Integration tests need to connect to a Vertica database to run stuffs, so you must have access to a Vertica database. Heres one way to go about it:
+There are two types of tests: unit tests and integration tests. Unit tests do simple unit testing of individual classes and functions, which do not require database connection. Integration tests need to connect to a Vertica database to run stuffs, so you must have access to a Vertica database. We recommend using a non-production database, because some tests need the superuser permission to manipulate global settings and potentially break that database. Heres one way to go about it:
 - Download docker kitematic: https://kitematic.com/
 - Spin up a vertica container (e.g. sumitchawla/vertica)
 

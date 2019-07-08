@@ -1,4 +1,4 @@
-# Copyright (c) 2018 Micro Focus or one of its affiliates.
+# Copyright (c) 2018-2019 Micro Focus or one of its affiliates.
 # Copyright (c) 2018 Uber Technologies, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,6 +38,7 @@ from __future__ import print_function, division, absolute_import
 
 import datetime
 import re
+from uuid import UUID
 
 try:
     from collections import OrderedDict  # python 2.7+ / 3
@@ -50,13 +51,6 @@ import six
 # noinspection PyUnresolvedReferences,PyCompatibility
 from builtins import str
 from six import binary_type, text_type, string_types, BytesIO, StringIO
-
-try:
-    from psycopg2.extensions import QuotedString
-except ImportError:
-    class QuotedString(object):
-        def __init__(self, s):
-            raise ImportError("couldn't import psycopg2.extensions.QuotedString")
 
 from .. import errors
 from ..compat import as_text
@@ -79,7 +73,7 @@ RE_NAME = u'(("{0}")|({0}))'.format(RE_NAME_BASE)
 RE_BASIC_INSERT_STAT = (
     u"INSERT\\s+INTO\\s+(?P<target>({0}\\.)?{0})"
     u"\\s*\\(\\s*(?P<variables>{0}(\\s*,\\s*{0})*)\\s*\\)"
-    u"\\s+VALUES\\s*\\(\\s*(?P<values>.*)\\s*\\)").format(RE_NAME)
+    u"\\s+VALUES\\s*\\(\\s*(?P<values>(.|\\s)*)\\s*\\)").format(RE_NAME)
 END_OF_RESULT_RESPONSES = (messages.CommandComplete, messages.PortalSuspended)
 
 class Cursor(object):
@@ -122,12 +116,14 @@ class Cursor(object):
         raise errors.NotSupportedError('Cursor.callproc() is not implemented')
 
     def close(self):
-        self._close_prepared_statement()
+        self._logger.info('Close the cursor')
+        if not self.closed():
+            self._close_prepared_statement()
         self._closed = True
 
     def cancel(self):
         if self.closed():
-            raise errors.Error('Cursor is closed')
+            raise errors.InterfaceError('Cursor is closed')
 
         self.connection.close()
 
@@ -136,7 +132,7 @@ class Cursor(object):
         self.operation = operation
 
         if self.closed():
-            raise errors.Error('Cursor is closed')
+            raise errors.InterfaceError('Cursor is closed')
 
         self.flush_to_query_ready()
 
@@ -171,6 +167,9 @@ class Cursor(object):
         if not isinstance(seq_of_parameters, (list, tuple)):
             raise TypeError("seq_of_parameters should be list/tuple")
 
+        if self.closed():
+            raise errors.InterfaceError('Cursor is closed')
+
         self.flush_to_query_ready()
         use_prepared = bool(self.connection.options['use_prepared_statements']
                 if use_prepared_statements is None else use_prepared_statements)
@@ -202,9 +201,12 @@ class Cursor(object):
                                  for parameters in seq_of_parameters]
                 data = "\n".join(seq_of_values)
 
+                copy_autocommit = self.connection.parameters.get('auto_commit', 'on')
+
                 copy_statement = (
                     u"COPY {0} ({1}) FROM STDIN DELIMITER ',' ENCLOSED BY '\"' "
-                    u"ENFORCELENGTH ABORT ON ERROR").format(target, variables)
+                    u"ENFORCELENGTH ABORT ON ERROR{2}").format(target, variables,
+                    " NO COMMIT" if copy_autocommit == 'off' else '')
 
                 self.copy(copy_statement, data)
             else:
@@ -348,7 +350,7 @@ class Cursor(object):
         sql = as_text(sql)
 
         if self.closed():
-            raise errors.Error('Cursor is closed')
+            raise errors.InterfaceError('Cursor is closed')
 
         self.flush_to_query_ready()
 
@@ -361,6 +363,7 @@ class Cursor(object):
         else:
             raise TypeError("Not valid type of data {0}".format(type(data)))
 
+        self._logger.info(u'Execute COPY statement: [{}]'.format(sql))
         self.connection.write(messages.Query(sql))
 
         while True:
@@ -417,9 +420,9 @@ class Cursor(object):
                     key = str(key)
                 key = as_text(key)
 
-                if isinstance(param, string_types):
+                if isinstance(param, (string_types, bytes)):
                     param = self.format_quote(as_text(param), is_csv)
-                elif isinstance(param, (datetime.datetime, datetime.date, datetime.time)):
+                elif isinstance(param, (datetime.datetime, datetime.date, datetime.time, UUID)):
                     param = self.format_quote(as_text(str(param)), is_csv)
                 elif param is None:
                     param = '' if is_csv else NULL
@@ -435,9 +438,9 @@ class Cursor(object):
         elif isinstance(parameters, (tuple, list)):
             tlist = []
             for param in parameters:
-                if isinstance(param, string_types):
+                if isinstance(param, (string_types, bytes)):
                     param = self.format_quote(as_text(param), is_csv)
-                elif isinstance(param, (datetime.datetime, datetime.date, datetime.time)):
+                elif isinstance(param, (datetime.datetime, datetime.date, datetime.time, UUID)):
                     param = self.format_quote(as_text(str(param)), is_csv)
                 elif param is None:
                     param = '' if is_csv else NULL
@@ -454,11 +457,10 @@ class Cursor(object):
         return operation
 
     def format_quote(self, param, is_csv):
-        # TODO Make sure adapt() behaves properly
         if is_csv:
             return u'"{0}"'.format(re.escape(param))
         else:
-            return QuotedString(param.encode(UTF_8, self.unicode_error)).getquoted()
+            return u"'{0}'".format(param.replace(u"'", u"''").replace(u"\\", u"\\\\"))
 
     def _execute_simple_query(self, query):
         """
@@ -482,6 +484,8 @@ class Cursor(object):
         elif isinstance(self._message, messages.RowDescription):
             self.description = [Column(fd, self.unicode_error) for fd in self._message.fields]
             self._message = self.connection.read_message()
+            if isinstance(self._message, messages.ErrorResponse):
+                raise errors.QueryError.from_error_response(self._message, query)
 
     def _error_handler(self, msg):
         self.connection.write(messages.Sync())
