@@ -41,6 +41,7 @@ import socket
 import ssl
 import getpass
 import uuid
+import base64
 from struct import unpack
 from collections import deque
 
@@ -170,7 +171,6 @@ def _generate_session_label():
         id=uuid.uuid1()
     )
 
-
 class Connection(object):
     def __init__(self, options=None):
         self.parameters = {}
@@ -179,6 +179,8 @@ class Connection(object):
         self.backend_key = None
         self.transaction_status = None
         self.socket = None
+        self.kerberos_stage = None
+        self.context = None
 
         options = options or {}
         self.options = {key: value for key, value in options.items() if value is not None}
@@ -189,6 +191,8 @@ class Connection(object):
         self.options.setdefault('database', self.options['user'])
         self.options.setdefault('password', DEFAULT_PASSWORD)
         self.options.setdefault('session_label', _generate_session_label())
+        self.options.setdefault('kerberos_service_name', 'vertica')
+        self.options.setdefault('kerberos_host_name', self.options['host'])
 
         # Set up connection logger
         logger_name = 'vertica_{0}_{1}'.format(id(self), str(uuid.uuid4())) # must be a unique value
@@ -553,6 +557,51 @@ class Connection(object):
             results += bytes_
         return results
 
+    def initialize_kerberos(self):
+        global kerberos
+        try:
+            import kerberos
+        except ImportError:
+            try:
+                import winkerberos as kerberos
+            except ImportError:
+                raise errors.ConnectionError('''
+                    No Kerberos package installed. Please run either 'pip install kerberos'
+                    or 'pip install winkerberos', depending on your operating system.
+                ''')
+        # Compute service principal name
+        service_principal = "{}@{}".format(self.options['kerberos_service_name'],
+                                                self.options['kerberos_host_name'])
+        self.kerberos_stage = "initialization"
+        result = 0
+        try:
+            while result == 0: # TODO: is the loop needed? For my setup it's not.
+                result, self.context = kerberos.authGSSClientInit(service_principal)
+        except Exception as err:
+            err_message = "Kerberos authentication failed during {}.\n Error msg: {}".format(
+                self.kerberos_stage,err)
+            self._logger.error(err_message)
+            raise errors.KerberosError(err_message)
+
+    def continue_kerberos(self, auth_data):
+        try:
+            self.kerberos_stage = "transaction"
+            result = kerberos.authGSSClientStep(self.context, base64.b64encode(auth_data))
+            if result == 0:
+                response = kerberos.authGSSClientResponse(self.context)
+                return (result, base64.b64decode(response))
+            elif result == -1:
+                err_message = "Kerberos authentication failed during {}.\n gssapi step returned -1".format(self.kerberos_stage)
+                self._logger.error(err_message)
+                raise errors.KerberosError(err_message)
+            else:
+                return (result, None)
+        except Exception as e:
+            err_message = "Kerberos authentication failed during {}.\n {}".format(self.kerberos_stage,
+                e)
+            self._logger.error(err_message)
+            raise errors.KerberosError(err_message)
+
     def startup_connection(self):
         # This doesn't handle Unicode usernames or passwords
         user = self.options['user'].encode(ASCII)
@@ -577,6 +626,15 @@ class Connection(object):
                 elif message.code == messages.Authentication.PASSWORD_GRACE:
                     self._logger.warning('The password for user {} will expire soon.'
                         ' Please consider changing it.'.format(self.options['user']))
+                elif message.code == messages.Authentication.GSS:
+                    self.initialize_kerberos()
+                    result, response = self.continue_kerberos('')
+                    if result == 0:
+                        self.write(messages.Password(response, message.code))
+                elif message.code == messages.Authentication.GSS_CONTINUE:
+                    result, response = self.continue_kerberos(message.auth_data)
+                    if result == 0:
+                        self.write(messages.Password(response, message.code))
                 else:
                     self.write(messages.Password(password, message.code,
                                                  {'user': user,

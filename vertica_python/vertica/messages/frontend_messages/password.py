@@ -87,10 +87,15 @@ class Password(BulkFrontendMessage):
                 self._password = hexdigest.encode(UTF_8)
             prefix = b'md5' if useMD5 else b'sha512'
             return prefix + self._password
+        elif self._auth_method in [Authentication.GSS, Authentication.GSS_CONTINUE]:
+            return self._password
         else:
             raise ValueError("unsupported authentication method: {0}".format(self._auth_method))
 
     def read_bytes(self):
         encoded_pw = self.encoded_password()
-        bytes_ = pack('{0}sx'.format(len(encoded_pw)), encoded_pw)
+        if self._auth_method == Authentication.GSS:
+            bytes_ = pack('{0}s'.format(len(encoded_pw)), encoded_pw)
+        else:
+            bytes_ = pack('{0}sx'.format(len(encoded_pw)), encoded_pw)
         return bytes_
