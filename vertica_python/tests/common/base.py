@@ -58,6 +58,7 @@ default_configs = {
     'port': 5433,
     'user': getpass.getuser(),
     'password': '',
+    'is_docker': 'False'
 }
 
 class VerticaPythonTestCase(unittest.TestCase):
@@ -108,7 +109,8 @@ class VerticaPythonTestCase(unittest.TestCase):
         if 'log_dir' in test_config:
             test_config['log_dir'] = os.path.join(test_config['log_dir'],
                                      'py{0}{1}'.format(sys.version_info.major, sys.version_info.minor))
-
+        if 'is_docker' in test_config:
+            test_config['is_docker'] = (test_config['is_docker'] == 'True')
         return test_config
 
     @classmethod

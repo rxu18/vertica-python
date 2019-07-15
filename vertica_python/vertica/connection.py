@@ -574,9 +574,10 @@ class Connection(object):
                                                 self.options['kerberos_host_name'])
         self.kerberos_stage = "initialization"
         result = 0
+        gssflag = kerberos.GSS_C_DELEG_FLAG|kerberos.GSS_C_MUTUAL_FLAG|kerberos.GSS_C_SEQUENCE_FLAG
         try:
             while result == 0: # TODO: is the loop needed? For my setup it's not.
-                result, self.context = kerberos.authGSSClientInit(service_principal)
+                result, self.context = kerberos.authGSSClientInit(service_principal, gssflags=gssflag)
         except Exception as err:
             err_message = "Kerberos authentication failed during {}.\n Error msg: {}".format(
                 self.kerberos_stage,err)
