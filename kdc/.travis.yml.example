@@ -1,0 +1,19 @@
+dist: trusty
+language: bash
+
+services:
+ - docker
+
+install:
+  - curl $VERTICA_DRIVER_URL -o clients.tar.gz
+  - tar -xzf clients.tar.gz
+  - export PATH=$PATH:`pwd`/opt/vertica/bin/
+  - git clone https://github.com/jbfavre/docker-vertica.git
+  - curl $VERTICA_CE_URL --create-dirs -o docker-vertica/packages/vertica-ce.latest.rpm
+  - docker build -f docker-vertica/Dockerfile.centos.7_9.x --build-arg VERTICA_PACKAGE=vertica-ce.latest.rpm -t jbfavre/vertica docker-vertica
+  - docker images
+  - docker run -d -p 5433:5433 jbfavre/vertica
+  - sleep 60
+
+script:
+  - vsql -U dbadmin -c "select 1+1;"

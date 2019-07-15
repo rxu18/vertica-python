@@ -558,7 +558,7 @@ class Connection(object):
         return results
 
     def initialize_kerberos(self):
-        global kerberos
+        global kerberos # TODO: This is bad style. I will change it.
         try:
             import kerberos
         except ImportError:
