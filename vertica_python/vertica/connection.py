@@ -587,7 +587,7 @@ class Connection(object):
     def continue_kerberos(self, auth_data):
         try:
             self.kerberos_stage = "transaction"
-            result = kerberos.authGSSClientStep(self.context, base64.b64encode(auth_data))
+            result = kerberos.authGSSClientStep(self.context, base64.b64encode(auth_data).decode("utf-8"))
             if result == 0:
                 response = kerberos.authGSSClientResponse(self.context)
                 return (result, base64.b64decode(response))
@@ -629,7 +629,7 @@ class Connection(object):
                         ' Please consider changing it.'.format(self.options['user']))
                 elif message.code == messages.Authentication.GSS:
                     self.initialize_kerberos()
-                    result, response = self.continue_kerberos('')
+                    result, response = self.continue_kerberos(b'')
                     if result == 0:
                         self.write(messages.Password(response, message.code))
                 elif message.code == messages.Authentication.GSS_CONTINUE:
