@@ -25,10 +25,8 @@ echo "[logging]
  company.com = $REALM" | tee /etc/krb5.conf
 kdb5_util -P 'admin' create
 
-# systemctl start kadmin.service
-# systemctl start krb5kdc.service
-/etc/rc.d/init.d/krb5kdc start
-/etc/rc.d/init.d/kadmin start
+systemctl start kadmin.service
+systemctl start krb5kdc.service
 chkconfig krb5kdc on
 chkconfig kadmin on
 
@@ -37,7 +35,6 @@ V_PRINC=vertica/${HOSTNAME}@${REALM}
 $KADMIN -q "addprinc -pw admin admin/admin"
 echo "*/admin@$REALM *" | tee -a /var/kerberos/krb5kdc/kadm5.acl
 $KADMIN -q "addprinc -randkey ${V_PRINC}"
-$KADMIN -q "ktadd -norandkey -k vertica.keytab ${V_PRINC}"
 
 # Add user principals
 u='u1'

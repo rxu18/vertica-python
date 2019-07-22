@@ -4,5 +4,5 @@ COPY . /vp
 WORKDIR /vp
 RUN apk add build-base krb5-dev
 RUN pip install kerberos pytz python-dateutil tox
-ENTRYPOINT ["tox","-e py37"]
+CMD ["tox","-e py37"]
 

@@ -1,17 +1,41 @@
-KSN=${1-'vertica'}
-KHOST=${2-'localhost'} # Your computer name.
-KTAB=${3-`pwd`/vertica.keytab}
-REALM=${4-'EXAMPLE.COM'}
-dbport=${5-'5433'}
+#! bin/sh
+KHOST=$1
+KSN=vertica
+REALM=EXAMPLE.COM
+KTAB=/vertica.keytab
+NAME=docker
 
-# specify needed params
-vsql -a -p $dbport << eof
-ALTER DATABASE SET KerberosServiceName = '${KSN}';
-ALTER DATABASE SET KerberosRealm = '${REALM}';
-ALTER DATABASE SET KerberosKeytabFile = '${KTAB}';
-ALTER DATABASE SET KerberosHostName = '{KHOST}';
+echo "[logging]
+ default = FILE:/var/log/krb5libs.log
+ kdc = FILE:/var/log/krb5kdc.log
+ admin_server = FILE:/var/log/kadmind.log
+[libdefaults]
+ default_realm = $REALM
+ dns_lookup_realm = false
+ dns_lookup_kdc = false
+ ticket_lifetime = 24h
+ renew_lifetime = 7d
+ forwardable = true
+[realms]
+ $REALM = {
+  kdc = $KHOST
+  admin_server = $KHOST
+ }
+ [domain_realm]
+ .company.com = $REALM
+ company.com = $REALM" | tee /etc/krb5.conf
+
+/opt/vertica/bin/vsql -U dbadmin -a << eof
+ALTER DATABASE $NAME SET KerberosHostName = '${KHOST}';
+ALTER DATABASE $NAME SET KerberosServiceName = '${KSN}';
+ALTER DATABASE $NAME SET KerberosRealm = '${REALM}';
+ALTER DATABASE $NAME SET KerberosKeytabFile = '${KTAB}';
+eof
+
+/bin/su - dbadmin -c "/opt/vertica/bin/admintools -t stop_db -d $NAME"
+/bin/su - dbadmin -c "/opt/vertica/bin/admintools -t start_db -d $NAME"
+
+sleep 10
+/opt/vertica/bin/vsql -U dbadmin -a << eof
 SELECT kerberos_config_check();
-
-CREATE AUTHENTICATION kerberos  METHOD 'gss' HOST '0.0.0.0/0';
-GRANT AUTHENTICATION  kerberos TO public;
 eof
