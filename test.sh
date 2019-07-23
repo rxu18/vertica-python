@@ -7,7 +7,7 @@ docker run -d --privileged --name vp.kdc --network test vertica/kdc
 docker exec vp.kdc /kdc/install_kdc.sh
 
 echo "Creating database"
-if [! -f "docker-vertica/packages/vertica-ce.latest.rpm"]; then
+if [ ! -f "docker-vertica/packages/vertica-ce.latest.rpm"]; then
 	export VERTICA_CE_URL="https://s3.amazonaws.com/vertica-community-edition-for-testing/XCz9cp7m/vertica-9.1.1-0.x86_64.RHEL6.rpm"
 	git clone https://github.com/jbfavre/docker-vertica.git
 	curl $VERTICA_CE_URL --create-dirs -o docker-vertica/packages/vertica-ce.latest.rpm
@@ -17,6 +17,7 @@ docker run -d --name=vp.db --network=test jbfavre/vertica
 
 echo "Making keytabs"
 export V_PRINC=vertica/$(docker inspect -f '{{.NetworkSettings.Networks.test.IPAddress }}' vp.db)@EXAMPLE.COM
+docker exec vp.kdc kadmin.local -q "addprinc -randkey ${V_PRINC}"
 docker exec vp.kdc kadmin.local -q "ktadd -norandkey -k vertica.keytab ${V_PRINC}"
 docker cp vp.kdc:vertica.keytab .
 

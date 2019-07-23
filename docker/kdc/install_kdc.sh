@@ -1,7 +1,9 @@
 #!/bin/sh
+sleep 5
+
 REALM=${1-'EXAMPLE.COM'}
 SERVICE_NAME=${2-'vertica'}
-USERS=${3-'u1, u2'}
+USERS=${3-'user1,user2,user3'}
 KADMIN='kadmin.local'
 # Write conf file
 echo "[logging]
@@ -30,13 +32,11 @@ systemctl start krb5kdc.service
 chkconfig krb5kdc on
 chkconfig kadmin on
 
-# Add a service principal
-V_PRINC=vertica/${HOSTNAME}@${REALM}
+# Create admin
 $KADMIN -q "addprinc -pw admin admin/admin"
 echo "*/admin@$REALM *" | tee -a /var/kerberos/krb5kdc/kadm5.acl
-$KADMIN -q "addprinc -randkey ${V_PRINC}"
 
 # Add user principals
-u='u1'
-$KADMIN -q "addprinc -pw ${u} ${u}"
-
+for u in ${USERS//,/ };do
+	$KADMIN -q "addprinc -pw ${u} ${u}"
+done
