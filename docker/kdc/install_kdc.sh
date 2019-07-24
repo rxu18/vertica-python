@@ -23,8 +23,8 @@ echo "[logging]
   admin_server = localhost
  }
  [domain_realm]
- .company.com = $REALM
- company.com = $REALM" | tee /etc/krb5.conf
+ .example.com = $REALM
+ example.com = $REALM" | tee /etc/krb5.conf
 kdb5_util -P 'admin' create
 
 systemctl start kadmin.service

@@ -1,5 +1,6 @@
 #! bin/sh
-KHOST=$1
+KDC=kerberos.example.com
+KHOST=vertica.example.com
 KSN=vertica
 REALM=EXAMPLE.COM
 KTAB=/vertica.keytab
@@ -18,20 +19,20 @@ echo "[logging]
  forwardable = true
 [realms]
  $REALM = {
-  kdc = $KHOST
-  admin_server = $KHOST
+  kdc = $KDC
+  admin_server = $KDC
  }
  [domain_realm]
- .company.com = $REALM
- company.com = $REALM" | tee /etc/krb5.conf
+ .example.com = $REALM
+ example.com = $REALM" | tee /etc/krb5.conf
 
 /opt/vertica/bin/vsql -U dbadmin -a << eof
 ALTER DATABASE $NAME SET KerberosHostName = '${KHOST}';
-ALTER DATABASE $NAME SET KerberosServiceName = '${KSN}';
 ALTER DATABASE $NAME SET KerberosRealm = '${REALM}';
 ALTER DATABASE $NAME SET KerberosKeytabFile = '${KTAB}';
 eof
 
+chown dbadmin /vertica.keytab
 /bin/su - dbadmin -c "/opt/vertica/bin/admintools -t stop_db -d $NAME"
 /bin/su - dbadmin -c "/opt/vertica/bin/admintools -t start_db -d $NAME"
 
