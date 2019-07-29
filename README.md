@@ -26,6 +26,11 @@ If you're using pip >= 1.4 and you don't already have python-dateutil installed:
 
     pip install --pre python-dateutil
 
+If you're using pip >= 1.4, your database uses Kerberos and you don't already have kerberos installed:
+
+    pip install kerberos    # for unix-like systems
+    pip install winkerberos # for Windows
+
 To install vertica-python with pip:
 
     pip install vertica-python
@@ -92,6 +97,7 @@ connection = vertica_python.connect(**conn_info)
 
 See more on SSL options [here](https://docs.python.org/3.6/library/ssl.html).
 
+If your database uses Kerberos Authentication, obtain a ticket using kinit or logging in. You can pass in optional arguments to customize the authentication. The parameters are `kerberos_service_name`, which defaults to `vertica`, and `kerberos_host_name`, which defaults to the database host name.
 Logging is disabled by default if you do not pass values to both ```log_level``` and ```log_path```.  The default value of ```log_level``` is logging.WARNING. You can find all levels [here](https://docs.python.org/3.6/library/logging.html#logging-levels). The default value of ```log_path``` is 'vertica_python.log', the log file will be in the current execution directory. For example,
 
 ```python

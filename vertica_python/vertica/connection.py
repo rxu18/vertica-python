@@ -584,7 +584,7 @@ class Connection(object):
                      gssflags=gssflag)
         except Exception as err:
             err_message = "Kerberos authentication failed during initialization.\
-                \n Error msg: {}".format(err)
+                \n Error msg: {}".format(str(err))
             self._logger.error(err_message)
             raise errors.KerberosError(err_message)
 
@@ -604,7 +604,7 @@ class Connection(object):
                 return (result, None)
         except Exception as err:
             err_message = "Kerberos authentication failed during transaction.\
-                \n Error msg: {}".format(err)
+                \n Error msg: {}".format(str(err))
             self._logger.error(err_message)
             raise errors.KerberosError(err_message)
 

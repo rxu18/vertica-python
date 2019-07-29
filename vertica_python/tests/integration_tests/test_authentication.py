@@ -49,7 +49,7 @@ class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
                 sp(["user1", "|", "kinit", "user1"])
                 self._conn_info['user'] = 'user1'
                 self.assertConnectionSuccess()
-                # TODO: Add all other tests to the system. 
+                # TODO: Add all other tests to the framework. This includes Test Expiration, Test No TGT and Test Wrong Realm.
             finally:
                 cur.execute("DROP USER IF EXISTS krb_user")
                 cur.execute("DROP AUTHENTICATION IF EXISTS testkerberos CASCADE")
