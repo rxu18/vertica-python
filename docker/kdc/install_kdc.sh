@@ -1,9 +1,7 @@
 #!/bin/sh
-sleep 5
-
-REALM=${1-'EXAMPLE.COM'}
-SERVICE_NAME=${2-'vertica'}
-USERS=${3-'user1,user2,user3'}
+REALM='EXAMPLE.COM'
+SERVICE_NAME='vertica'
+USERS='user1,user2,user3'
 KADMIN='kadmin.local'
 # Write conf file
 echo "[logging]

@@ -36,7 +36,4 @@ chown dbadmin /vertica.keytab
 /bin/su - dbadmin -c "/opt/vertica/bin/admintools -t stop_db -d $NAME"
 /bin/su - dbadmin -c "/opt/vertica/bin/admintools -t start_db -d $NAME"
 
-sleep 10
-/opt/vertica/bin/vsql -U dbadmin -a << eof
-SELECT kerberos_config_check();
-eof
+/opt/vertica/bin/vsql -U dbadmin -a -c "SELECT kerberos_config_check();"
