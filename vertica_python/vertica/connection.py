@@ -45,6 +45,14 @@ import base64
 from struct import unpack
 from collections import deque
 
+try:
+    import kerberos
+except ImportError:
+    try:
+        import winkerberos as kerberos
+    except ImportError:
+        pass
+
 # noinspection PyCompatibility,PyUnresolvedReferences
 from builtins import str
 from six import raise_from, string_types, integer_types
@@ -179,7 +187,6 @@ class Connection(object):
         self.backend_key = None
         self.transaction_status = None
         self.socket = None
-        self.kerberos_stage = None
         self.context = None
 
         options = options or {}
@@ -558,48 +565,46 @@ class Connection(object):
         return results
 
     def initialize_kerberos(self):
-        global kerberos # TODO: This is bad style. I will change it.
-        try:
-            import kerberos
-        except ImportError:
-            try:
-                import winkerberos as kerberos
-            except ImportError:
-                raise errors.ConnectionError('''
-                    No Kerberos package installed. Please run either 'pip install kerberos'
-                    or 'pip install winkerberos', depending on your operating system.
-                ''')
         # Compute service principal name
         service_principal = "{}@{}".format(self.options['kerberos_service_name'],
-                                                self.options['kerberos_host_name'])
-        self.kerberos_stage = "initialization"
-        result = 0
-        gssflag = kerberos.GSS_C_DELEG_FLAG|kerberos.GSS_C_MUTUAL_FLAG|kerberos.GSS_C_SEQUENCE_FLAG
+                                           self.options['kerberos_host_name'])
         try:
-            while result == 0: # TODO: is the loop needed? For my setup it's not.
-                result, self.context = kerberos.authGSSClientInit(service_principal, gssflags=gssflag)
+            gssflag = kerberos.GSS_C_DELEG_FLAG | kerberos.GSS_C_MUTUAL_FLAG \
+                | kerberos.GSS_C_SEQUENCE_FLAG
+        except NameError:
+            raise errors.ConnectionError('''
+                No Kerberos package installed. Please run either 'pip install kerberos'
+                or 'pip install winkerberos', depending on your operating system.
+                ''')
+
+        result = 0
+        try:
+            while result == 0:
+                result, self.context = kerberos.authGSSClientInit(service_principal,\
+                     gssflags=gssflag)
         except Exception as err:
-            err_message = "Kerberos authentication failed during {}.\n Error msg: {}".format(
-                self.kerberos_stage,err)
+            err_message = "Kerberos authentication failed during initialization.\
+                \n Error msg: {}".format(err)
             self._logger.error(err_message)
             raise errors.KerberosError(err_message)
 
     def continue_kerberos(self, auth_data):
         try:
-            self.kerberos_stage = "transaction"
-            result = kerberos.authGSSClientStep(self.context, base64.b64encode(auth_data).decode("utf-8"))
+            result = kerberos.authGSSClientStep(self.context, \
+                base64.b64encode(auth_data).decode("utf-8"))
             if result == 0:
                 response = kerberos.authGSSClientResponse(self.context)
                 return (result, base64.b64decode(response))
             elif result == -1:
-                err_message = "Kerberos authentication failed during {}.\n gssapi step returned -1".format(self.kerberos_stage)
+                err_message = "Kerberos authentication failed during transaction.\
+                    \n gssapi step returned -1"
                 self._logger.error(err_message)
                 raise errors.KerberosError(err_message)
             else:
                 return (result, None)
-        except Exception as e:
-            err_message = "Kerberos authentication failed during {}.\n {}".format(self.kerberos_stage,
-                e)
+        except Exception as err:
+            err_message = "Kerberos authentication failed during transaction.\
+                \n Error msg: {}".format(err)
             self._logger.error(err_message)
             raise errors.KerberosError(err_message)
 

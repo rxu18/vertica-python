@@ -1,5 +1,5 @@
-#!/bin/bash
-
+#!/bin/sh
+# TODO: Give this file a better name.
 install_kdc(){
 	echo "Setting up KDC"
 	docker network create test
@@ -36,6 +36,13 @@ create_db(){
 	docker exec vp.db /kerberize.sh
 }
 
+test_python(){
+	# TODO: test_python sends whole packet to daemon. Mounting it would be faster and saves space.
+	docker build -f docker/test/Dockerfile -t vertica/test .
+	docker run --network=test --rm --name=vp.test vertica/test
+	docker image rm vertica/test
+}
+
 stop_container(){	
 	echo "Stopping containers"
 	docker container stop vp.kdc
@@ -58,17 +65,15 @@ op=$1
 
 if [ $# -eq 0 ]; then
 	echo_use
+elif [ $1 = 'start' ]; then
+	install_kdc
+	create_db
+elif [ $1 = 'test' ]; then
+	test_python
+elif [ $1 = 'stop' ]; then
+	stop_container
+elif [ $1 = 'clean' ]; then
+	clean_system
 else
-	if [ $1 = 'start' ]; then
-		install_kdc
-		create_db
-	elif [ $1 = 'test' ]; then
-		test_python
-	elif [ $1 = 'stop' ]; then
-		stop_container
-	elif [ $1 = 'clean' ]; then
-		clean_system
-	else
-		echo_use
-	fi
+	echo_use
 fi

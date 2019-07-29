@@ -35,20 +35,21 @@ class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
             sp = subprocess.call
         else:
             sp = subprocess.run
-        self.logger.warn(self.test_config)
-        if not self.test_config['is_docker']:
+        if not self.test_config['enable_kerberos_test']:
             msg = ("The test uses the Dockerized testing environment.")
             self.skipTest(msg)
         with self._connect() as conn:
             cur = conn.cursor()
-            cur.execute("DROP USER IF EXISTS krb_user")
+            cur.execute("DROP USER IF EXISTS user1")
             cur.execute("DROP AUTHENTICATION IF EXISTS testkerberos CASCADE")
             try:
-                cur.execute("CREATE USER krb_user")
+                cur.execute("CREATE USER user1")
                 cur.execute("CREATE AUTHENTICATION testkerberos METHOD 'gss' HOST '0.0.0.0/0'")
-                cur.execute ("GRANT AUTHENTICATION testkerberos TO krb_user")
-                self._conn_info['user'] = 'krb_user'
+                cur.execute("GRANT AUTHENTICATION testkerberos TO user1")
+                sp(["user1", "|", "kinit", "user1"])
+                self._conn_info['user'] = 'user1'
                 self.assertConnectionSuccess()
+                # TODO: Add all other tests to the system. 
             finally:
                 cur.execute("DROP USER IF EXISTS krb_user")
                 cur.execute("DROP AUTHENTICATION IF EXISTS testkerberos CASCADE")
