@@ -1,6 +1,6 @@
 #!/bin/sh
-# TODO: Give this file a better name.
-install_kdc(){
+
+create_kdc(){
 	echo "Setting up KDC"
 	docker network create test
 	docker build -t vertica/kdc docker/kdc
@@ -36,14 +36,24 @@ create_db(){
 	docker exec $VP_DB_NAME /kerberize.sh
 }
 
-test_python(){
+create_test(){
 	# TODO: test_python sends whole packet to daemon. Mounting it would be faster and saves space.
-	docker build -f docker/test/Dockerfile -t vertica/test .
+	if [[ $PYENV =~ ^py[0-9][0-9]$ ]]; then
+	VER=${PYENV:2:1}.${PYENV:3}
+	cp docker/test/Dockerfile docker/test/Dockerfile.backup
+	sed -i "s/<ver>/$VER/g" docker/test/Dockerfile
+	sed -i "s/<toxenv>/$PYENV/g" docker/test/Dockerfile
+	kdc_addr=$(docker inspect -f '{{.NetworkSettings.Networks.test.IPAddress }}' $VP_KDC_NAME)
+	docker build -f docker/test/Dockerfile -tsms of abelian varieties over finite fields pertica/test --build-arg kdc_addr=$kdc_addr .
 	docker run --network=test --rm --name=vp.test vertica/test
+        
+	mv docker/test/Dockerfile.backup docker/test/Dockerfile	
 	docker image rm vertica/test
+	else echo "Invalid python environment."
+	fi
 }
 
-stop_container(){	
+stop_containers(){	
 	echo "Stopping containers"
 	docker container stop $VP_KDC_NAME
 	docker container stop $VP_DB_NAME
@@ -63,28 +73,31 @@ echo_use(){
 }
 
 echo_help(){
-	echo "$0 sets up a kerberos-enabled vertica database to facilitate testing."
-	echo "Usage: $0 [arguments] command"
-	echo
-	echo "Commands: [start|test|stop|clean]"
-	echo "Start builds vertica and kerberos."
-	echo "Test builds and runs the vertica-python test suite."
-	echo "Stop stops the containers."
-	echo "Clean removes the containers and the images."
-	echo
-	echo "Options: --kdc, --db, --py"
-	echo "--kdc specifies the name of the kdc container (default: vp.kdc)"
-	echo "--db specifies the name of the database container (default: vp.db)"
-	echo "--py specifies the version of python. Options: py37 (default),py27,py34,py35,py36."
+	echo -e '''
+vertica_testenv sets up a kerberos-enabled vertica database to facilitate testing.
+Usage: vertica_testenv [arguments] command
+
+Commands: [start|test|stop|clean]
+Start \t Build vertica and kerberos.
+Test \t Build and run the vertica-python test suite.
+Stop \t Stop the containers.
+Clean \t Remove the containers and the images.
+
+Options: --kdc, --db, --py
+--kdc \t Name of the kdc container (default: vp.kdc)
+--db \t Name of the database container (default: vp.db)
+--py \t Python version. Options: py37 (default),py27,py34,py35,py36.
+'''
 }
 
 if [ $# -eq 0 ]; then
 	echo_use
-	return 0
+	exit 0
 fi
 
 VP_KDC_NAME='vp.kdc'
 VP_DB_NAME='vp.db'
+PYENV='py37'
 while [ -n "$1" ]; do
 	case "$1" in
 	--help) echo_help
@@ -97,7 +110,8 @@ while [ -n "$1" ]; do
 	shift
 	;;
 	--py) PYENV=$2
-	;;	
+	shift	
+	;;
 	--) shift
 	break ;;
 	*) break ;;
@@ -106,14 +120,14 @@ while [ -n "$1" ]; do
 done
 
 op=$1
-if [ op = 'start' ]; then
-	install_kdc
+if [ $op = 'start' ]; then
+	create_kdc
 	create_db
-elif [ $1 = 'test' ]; then
-	test_python
-elif [ $1 = 'stop' ]; then
-	stop_container
-elif [ $1 = 'clean' ]; then
+elif [ $op = 'test' ]; then
+	create_test
+elif [ $op = 'stop' ]; then
+	stop_containers
+elif [ $op = 'clean' ]; then
 	clean_system
 else
 	echo_use
