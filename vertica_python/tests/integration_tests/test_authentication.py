@@ -15,6 +15,7 @@
 from __future__ import print_function, division, absolute_import
 
 from .base import VerticaPythonIntegrationTestCase
+from ... import errors
 import six
 import subprocess
 
@@ -36,7 +37,7 @@ class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
         else:
             sp = subprocess.run
         if not self.test_config['enable_kerberos_test']:
-            msg = ("The test uses the Dockerized testing environment.")
+            msg = ("Kerberos test not enabled.")
             self.skipTest(msg)
         with self._connect() as conn:
             cur = conn.cursor()
@@ -46,10 +47,13 @@ class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
                 cur.execute("CREATE USER user1")
                 cur.execute("CREATE AUTHENTICATION testkerberos METHOD 'gss' HOST '0.0.0.0/0'")
                 cur.execute("GRANT AUTHENTICATION testkerberos TO user1")
-                sp(["user1", "|", "kinit", "user1"])
                 self._conn_info['user'] = 'user1'
+
+                sp(["kdestroy"])
+                self.assertConnectionFail(err_type=errors.KerberosError, err_msg='.*')
+                sp(["bash", "-c", "echo user1 | kinit user1"])
                 self.assertConnectionSuccess()
-                # TODO: Add all other tests to the framework. This includes Test Expiration, Test No TGT and Test Wrong Realm.
+                
             finally:
                 cur.execute("DROP USER IF EXISTS krb_user")
                 cur.execute("DROP AUTHENTICATION IF EXISTS testkerberos CASCADE")
@@ -92,36 +96,6 @@ class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
                 cur.execute("DROP USER IF EXISTS sha512_user")
                 cur.execute("DROP AUTHENTICATION IF EXISTS testhostHash CASCADE")
                 cur.execute("DROP AUTHENTICATION IF EXISTS testlocalHash CASCADE")
-
-    def test_trust(self):
-        with self._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("DROP USER IF EXISTS trust_user")
-            cur.execute("DROP AUTHENTICATION IF EXISTS testtrust CASCADE")
-            try:
-                cur.execute("CREATE USER trust_user")
-                cur.execute("CREATE AUTHENTICATION testtrust METHOD 'trust' HOST '0.0.0.0/0'")
-                cur.execute ("GRANT AUTHENTICATION testtrust TO trust_user")
-                self._conn_info['user'] = 'trust_user'
-                self.assertConnectionSuccess()
-            finally:
-                cur.execute("DROP USER IF EXISTS trust_user")
-                cur.execute("DROP AUTHENTICATION IF EXISTS testtrust CASCADE")
-
-    def test_reject(self):
-        with self._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("DROP USER IF EXISTS reject_user")
-            cur.execute("DROP AUTHENTICATION IF EXISTS testreject CASCADE")
-            try:
-                cur.execute("CREATE USER reject_user")
-                cur.execute("CREATE AUTHENTICATION testreject METHOD 'reject' HOST '0.0.0.0/0'")
-                cur.execute ("GRANT AUTHENTICATION testreject TO reject_user")
-                self._conn_info['user'] = 'reject_user'
-                self.assertConnectionFail(err_msg='.*')
-            finally:
-                cur.execute("DROP USER IF EXISTS reject_user")
-                cur.execute("DROP AUTHENTICATION IF EXISTS testreject CASCADE")
 
     def test_password_expire(self):
         with self._connect() as conn:

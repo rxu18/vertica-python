@@ -582,9 +582,9 @@ class Connection(object):
             while result == 0:
                 result, self.context = kerberos.authGSSClientInit(service_principal,\
                      gssflags=gssflag)
-        except Exception as err:
-            err_message = "Kerberos authentication failed during initialization.\
-                \n Error msg: {}".format(str(err))
+        except kerberos.GSSError as err:
+            # err_message = "{}\n{}".format(err[0][0], err[1][0])
+            err_message = err
             self._logger.error(err_message)
             raise errors.KerberosError(err_message)
 
@@ -602,9 +602,9 @@ class Connection(object):
                 raise errors.KerberosError(err_message)
             else:
                 return (result, None)
-        except Exception as err:
-            err_message = "Kerberos authentication failed during transaction.\
-                \n Error msg: {}".format(str(err))
+        except kerberos.GSSError as err:
+            err = err.args
+            err_message = "{}\n{}".format(err[0][0], err[1][0])
             self._logger.error(err_message)
             raise errors.KerberosError(err_message)
 
