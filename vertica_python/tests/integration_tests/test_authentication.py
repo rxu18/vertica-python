@@ -18,6 +18,8 @@ from .base import VerticaPythonIntegrationTestCase
 from ... import errors
 import six
 import subprocess
+import os
+import time
 
 
 class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
@@ -33,9 +35,9 @@ class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
 
     def test_kerberos(self):
         if six.PY2:
-            sp = subprocess.call
+            sp = lambda s : subprocess.call(s, stdout=open(os.devnull, 'wb'))
         else:
-            sp = subprocess.run
+            sp = lambda s : subprocess.run(s, stdout=open(os.devnull, 'wb'))
         if not self.test_config['enable_kerberos_test']:
             msg = ("Kerberos test not enabled.")
             self.skipTest(msg)
@@ -48,14 +50,37 @@ class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
                 cur.execute("CREATE AUTHENTICATION testkerberos METHOD 'gss' HOST '0.0.0.0/0'")
                 cur.execute("GRANT AUTHENTICATION testkerberos TO user1")
                 self._conn_info['user'] = 'user1'
+                
+                # Add DNS setup
+                sp(["/bin/sh", "-c", "echo " + self._conn_info['host'] + " vertica.example.com | tee -a /etc/hosts"])
 
-                sp(["kdestroy"])
-                self.assertConnectionFail(err_type=errors.KerberosError, err_msg='.*')
-                sp(["bash", "-c", "echo user1 | kinit user1"])
+                # Test Kerberos authentication works.
+                sp(["sh", "-c", "echo user1 | kinit user1"])
                 self.assertConnectionSuccess()
                 
+                # Test error message when user has no ticket.
+                sp(["kdestroy"])
+                self.assertConnectionFail(err_type=errors.KerberosError, err_msg=(\
+                    "Unspecified GSS failure.  Minor code may provide more information\n"
+                    "No Kerberos credentials available .*"))
+                
+                # Test when a ticket expires.
+                sp(["sh", "-c", "echo user1 | kinit user1"])
+                time.sleep(5)
+                self.assertConnectionFail(err_type=errors.KerberosError, err_msg=(\
+                    "The referenced context has expired\n"
+                    "No error information"))
+
+                # Test when the kdc is missing. We need to reset the cached ticket.
+                sp(["kdestroy"])
+                sp(["sh", "-c", "echo user1 | kinit user1"])
+                sp(["mv", "/etc/krb5.conf", "/etc/krb5.conf.bak"])
+                self.assertConnectionFail(err_type=errors.KerberosError, err_msg=(\
+                    "Unspecified GSS failure.  Minor code may provide more information\n"
+                    "Cannot find KDC for realm \".*\""))
+                sp(["mv", "/etc/krb5.conf.bak", "/etc/krb5.conf"])
             finally:
-                cur.execute("DROP USER IF EXISTS krb_user")
+                cur.execute("DROP USER IF EXISTS user1")
                 cur.execute("DROP AUTHENTICATION IF EXISTS testkerberos CASCADE")
 
     def test_SHA512(self):

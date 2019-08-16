@@ -26,11 +26,6 @@ If you're using pip >= 1.4 and you don't already have python-dateutil installed:
 
     pip install --pre python-dateutil
 
-If you're using pip >= 1.4, your database uses Kerberos and you don't already have kerberos installed:
-
-    pip install kerberos    # for unix-like systems
-    pip install winkerberos # for Windows
-
 To install vertica-python with pip:
 
     pip install vertica-python
@@ -39,6 +34,15 @@ Source code for vertica-python can be found at:
 
     https://github.com/vertica/vertica-python
 
+### Using Kerberos
+If you're using pip >= 1.4 and your database uses Kerberos:
+
+    pip install kerberos    # for unix-like systems
+    pip install winkerberos # for Windows
+
+Note that the `kerberos` are extension modules and requires development python. You can install this with:
+
+    sudo yum install python-devel
 
 ## Usage
 

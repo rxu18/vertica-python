@@ -23,4 +23,4 @@ before_install:
   - git clone https://github.com/rxu18/vertica-testenv.git
   - vertica-testenv/vertica_testenv start
 script:
-  - vertica-testenv/vertica_testenv test
+  - vertica-testenv/vertica_testenv test --py $TOXENV

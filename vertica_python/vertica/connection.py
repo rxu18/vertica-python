@@ -565,12 +565,12 @@ class Connection(object):
         return results
 
     def initialize_kerberos(self):
-        # Compute service principal name
+        # Compute service principal name and check for Kerberos package
         service_principal = "{}@{}".format(self.options['kerberos_service_name'],
                                            self.options['kerberos_host_name'])
         try:
             gssflag = kerberos.GSS_C_DELEG_FLAG | kerberos.GSS_C_MUTUAL_FLAG \
-                | kerberos.GSS_C_SEQUENCE_FLAG
+                | kerberos.GSS_C_SEQUENCE_FLAG | kerberos.GSS_C_REPLAY_FLAG
         except NameError:
             raise errors.ConnectionError('''
                 No Kerberos package installed. Please run either 'pip install kerberos'
@@ -583,8 +583,8 @@ class Connection(object):
                 result, self.context = kerberos.authGSSClientInit(service_principal,\
                      gssflags=gssflag)
         except kerberos.GSSError as err:
-            # err_message = "{}\n{}".format(err[0][0], err[1][0])
-            err_message = err
+            err = err.args
+            err_message = "{}\n{}".format(err[0][0], err[1][0])
             self._logger.error(err_message)
             raise errors.KerberosError(err_message)
 
