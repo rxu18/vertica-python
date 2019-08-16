@@ -21,6 +21,7 @@ matrix:
 
 before_install:
   - git clone https://github.com/rxu18/vertica-testenv.git
-  - vertica-testenv/vertica_testenv start
+  - cd vertica-testenv
+  - ./vertica_testenv start
 script:
-  - vertica-testenv/vertica_testenv test --py $TOXENV
+  - ./vertica_testenv test --py $TOXENV
