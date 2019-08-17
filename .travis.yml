@@ -22,6 +22,6 @@ matrix:
 install:
   - git clone https://github.com/rxu18/vertica-testenv.git
   - cd vertica-testenv
-#   - ./vertica_testenv start
+  - ./vertica_testenv start
 script:
   - ./vertica_testenv test --py $TOXENV
