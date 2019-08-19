@@ -13,14 +13,13 @@
 # limitations under the License.
 
 from __future__ import print_function, division, absolute_import
-
-from .base import VerticaPythonIntegrationTestCase
-from ... import errors
-import six
 import subprocess
 import os
 import time
+import six
 
+from .base import VerticaPythonIntegrationTestCase
+from ... import errors
 
 class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
     def setUp(self):
@@ -35,9 +34,9 @@ class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
 
     def test_kerberos(self):
         if six.PY2:
-            sp = lambda s : subprocess.call(s, stdout=open(os.devnull, 'wb'))
+            sp = lambda s: subprocess.call(s, stdout=open(os.devnull, 'wb'))
         else:
-            sp = lambda s : subprocess.run(s, stdout=open(os.devnull, 'wb'))
+            sp = lambda s: subprocess.run(s, stdout=open(os.devnull, 'wb'))
         if not self.test_config['enable_kerberos_test']:
             msg = ("Kerberos test not enabled.")
             self.skipTest(msg)
@@ -50,20 +49,21 @@ class AuthenticationTestCase(VerticaPythonIntegrationTestCase):
                 cur.execute("CREATE AUTHENTICATION testkerberos METHOD 'gss' HOST '0.0.0.0/0'")
                 cur.execute("GRANT AUTHENTICATION testkerberos TO user1")
                 self._conn_info['user'] = 'user1'
-                
+
                 # Add DNS setup
-                sp(["/bin/sh", "-c", "echo " + self._conn_info['host'] + " vertica.example.com | tee -a /etc/hosts"])
+                sp(["/bin/sh", "-c", "echo {} vertica.example.com | tee -a /etc/hosts"
+                    .format(self._conn_info['host'])])
 
                 # Test Kerberos authentication works.
                 sp(["sh", "-c", "echo user1 | kinit user1"])
                 self.assertConnectionSuccess()
-                
+
                 # Test error message when user has no ticket.
                 sp(["kdestroy"])
                 self.assertConnectionFail(err_type=errors.KerberosError, err_msg=(\
                     "Unspecified GSS failure.  Minor code may provide more information\n"
                     "No Kerberos credentials available .*"))
-                
+
                 # Test when a ticket expires.
                 sp(["sh", "-c", "echo user1 | kinit user1"])
                 time.sleep(5)

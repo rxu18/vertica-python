@@ -69,6 +69,7 @@ DEFAULT_HOST = 'localhost'
 DEFAULT_USER = getpass.getuser()
 DEFAULT_PORT = 5433
 DEFAULT_PASSWORD = ''
+DEFAULT_SERVICE_NAME = 'vertica'
 DEFAULT_LOG_LEVEL = logging.WARNING
 DEFAULT_LOG_PATH = 'vertica_python.log'
 ASCII = 'ascii'
@@ -179,6 +180,7 @@ def _generate_session_label():
         id=uuid.uuid1()
     )
 
+
 class Connection(object):
     def __init__(self, options=None):
         self.parameters = {}
@@ -198,7 +200,7 @@ class Connection(object):
         self.options.setdefault('database', self.options['user'])
         self.options.setdefault('password', DEFAULT_PASSWORD)
         self.options.setdefault('session_label', _generate_session_label())
-        self.options.setdefault('kerberos_service_name', 'vertica')
+        self.options.setdefault('kerberos_service_name', DEFAULT_SERVICE_NAME)
         self.options.setdefault('kerberos_host_name', self.options['host'])
 
         # Set up connection logger

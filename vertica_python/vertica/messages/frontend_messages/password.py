@@ -87,7 +87,7 @@ class Password(BulkFrontendMessage):
                 self._password = hexdigest.encode(UTF_8)
             prefix = b'md5' if useMD5 else b'sha512'
             return prefix + self._password
-        elif self._auth_method in [Authentication.GSS, Authentication.GSS_CONTINUE]:
+        elif self._auth_method in (Authentication.GSS, Authentication.GSS_CONTINUE):
             return self._password
         else:
             raise ValueError("unsupported authentication method: {0}".format(self._auth_method))

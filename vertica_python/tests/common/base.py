@@ -111,6 +111,7 @@ class VerticaPythonTestCase(unittest.TestCase):
                                      'py{0}{1}'.format(sys.version_info.major, sys.version_info.minor))
         if 'enable_kerberos_test' in test_config:
             test_config['enable_kerberos_test'] = (test_config['enable_kerberos_test'] == 'True')
+
         return test_config
 
     @classmethod

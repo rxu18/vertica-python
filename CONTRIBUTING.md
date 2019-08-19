@@ -146,11 +146,6 @@ The arguments after the `--` will be substituted everywhere where you specify `{
 Run `$ nosetests --help` to see all arguments you can specify after the `--`.
 For more usages about [tox](https://tox.readthedocs.io), see the Python documentation.
 
-### Running tests with Docker
-If you do not have a Vertica database ready and are on a Unix-like system, the Dockerized testing framework creates a database in a container that also supports Kerberos authentication. Run `sh setup_docker_vertica start` to start the database. Run `sh setup_docker_vertica stop` and `sh setup_docker_vertica clean` to stop and clean the database container. This setup requires 3GB of free space. 
-
-### Testing Kerberos
-The Kerberos tests ensure that vertica-python implements Kerberos authentication correctly. The test requires specific system and database setup, and makes temporarily changes to the system state. They willrun during Travis CI testing, when there is a consistent environment, and you will not need to run them locally.
 
 ## Step 4: Implement your fix or feature
 
